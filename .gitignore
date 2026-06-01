@@ -1,0 +1,21 @@
+# Keil generated output
+Objects/*
+Listings/*
+!Objects/.gitkeep
+!Listings/.gitkeep
+*.uvguix.*
+*.uvgui.*
+*.uvgui
+build_keil.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor and OS
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
