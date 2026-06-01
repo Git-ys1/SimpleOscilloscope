@@ -3,7 +3,7 @@ from __future__ import annotations
 import queue
 import threading
 
-from ..core.models import AcquisitionStats, ConnectionConfig, RunState, SampleFrame, SignalConfig
+from ..core.models import AcquisitionStats, ConnectionConfig, RunState, SampleBlock, SampleFrame, SignalConfig
 from ..protocol.ascii_protocol import AsciiProtocol
 from ..protocol.commands import line, set_signal
 from ..transport.factory import open_transport
@@ -85,5 +85,8 @@ class AcquisitionController:
                 stats = self._stats.update_sample(event)
                 self.events.put(("sample", event))
                 self.events.put(("stats", stats))
+            elif isinstance(event, SampleBlock):
+                self.state = RunState.RUNNING
+                self.events.put(("block", event))
             else:
                 self.events.put(("frame", event))

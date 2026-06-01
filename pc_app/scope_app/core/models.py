@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+import numpy as np
+
 
 class RunState(str, Enum):
     DISCONNECTED = "disconnected"
@@ -45,6 +47,13 @@ class TriggerConfig:
 
 
 @dataclass(frozen=True)
+class RecordConfig:
+    sample_rate_hz: int = 10_000
+    record_length: int = 1024
+    trigger_position: float = 0.2
+
+
+@dataclass(frozen=True)
 class SampleFrame:
     sequence: int
     time_ms: int
@@ -53,6 +62,19 @@ class SampleFrame:
     frequency_hz: int
     amplitude_mv: int
     offset_mv: int
+
+
+@dataclass(frozen=True)
+class SampleBlock:
+    sequence: int
+    start_time_ms: float
+    sample_rate_hz: int
+    channel_count: int
+    values_mv: np.ndarray
+
+    @property
+    def point_count(self) -> int:
+        return int(self.values_mv.shape[-1])
 
 
 @dataclass(frozen=True)

@@ -78,7 +78,7 @@ tools\run_scope.bat --source COM14 --baud 115200 --connect
 - `pc_app/scope_app/processing`：测量、显示降采样、触发预留。
 - `pc_app/scope_app/ui`：PySide6 主窗口、PyQtGraph 波形视图、控制面板、测量面板、状态栏。
 
-上位机当前支持 `time/div`、`volt/div`、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。
+上位机当前支持 `time/div`、`volt/div`、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.5.0 起，上位机也预留了采样块数据模型和高速二进制协议解析器。
 
 运行测试：
 

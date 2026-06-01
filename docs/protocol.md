@@ -42,3 +42,23 @@ SET AMP 1200
 SET OFFSET 1650
 SET RATE 100
 ```
+
+## 预留高速二进制数据帧
+
+v0.5.0 起，上位机已经预留并测试了“一帧多点”的二进制解析器，后续固件高速化时可切换到该格式。
+
+帧结构，小端序：
+
+| 字段 | 字节数 | 说明 |
+| --- | ---: | --- |
+| Sync | 2 | 固定 `0xA5 0x5A` |
+| Version | 1 | 当前建议 `1` |
+| Type | 1 | `0x01` 表示 DATA |
+| Sequence | 4 | 数据块序号 |
+| SampleRateHz | 4 | 采样率 |
+| ChannelCount | 1 | 通道数 |
+| PointCount | 2 | 每通道点数 |
+| Payload | N | `uint16` ADC 原始值数组，按通道排列 |
+| CRC16 | 2 | 对 CRC 前所有字节计算 CCITT-FALSE |
+
+上位机会把 `uint16 ADC` 按 `0..4095 -> 0..3300mV` 转换并写入波形环形缓冲。

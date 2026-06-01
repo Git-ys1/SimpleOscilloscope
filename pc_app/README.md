@@ -32,6 +32,13 @@ v0.4.0 起，加入触发系统：
 - `Pre-trigger %`：触发点在屏幕内的预触发位置。
 - `Re-arm Single`：重新武装单次触发。
 
+v0.5.0 起，上位机数据层支持采样块：
+
+- `SampleBlock`：表示一帧多点、多通道数据。
+- `RecordConfig`：预留采样率、记录长度、触发位置。
+- `BinaryProtocol`：可解析规划中的高速二进制 DATA 帧。
+- `WaveformRingBuffer.append_block()`：支持把采样块写入现有显示缓冲。
+
 ## 启动
 
 从仓库根目录执行：

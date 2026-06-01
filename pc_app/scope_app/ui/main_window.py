@@ -87,6 +87,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if kind == "sample":
                 self.buffer.append(payload)
                 redraw = not self.paused
+            elif kind == "block":
+                self.buffer.append_block(payload)
+                redraw = not self.paused
             elif kind == "stats":
                 self.measurements.update_stats(payload)
             elif kind == "error":

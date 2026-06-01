@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .models import SampleFrame
+from .models import SampleBlock, SampleFrame
 
 
 class WaveformRingBuffer:
@@ -33,6 +33,27 @@ class WaveformRingBuffer:
     def extend(self, samples: list[SampleFrame]) -> None:
         for sample in samples:
             self.append(sample)
+
+    def append_block(self, block: SampleBlock, channel: int = 0) -> None:
+        if block.point_count == 0:
+            return
+        if channel >= block.channel_count:
+            raise ValueError(f"channel {channel} out of range for block with {block.channel_count} channel(s)")
+
+        values = block.values_mv[channel] if block.values_mv.ndim == 2 else block.values_mv
+        dt_ms = 1000.0 / float(block.sample_rate_hz)
+        for offset, value in enumerate(values.tolist()):
+            self.append(
+                SampleFrame(
+                    sequence=block.sequence + offset,
+                    time_ms=int(block.start_time_ms + offset * dt_ms),
+                    value_mv=float(value),
+                    wave="BLOCK",
+                    frequency_hz=0,
+                    amplitude_mv=0,
+                    offset_mv=0,
+                )
+            )
 
     def arrays(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if self._size == 0:
