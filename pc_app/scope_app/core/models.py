@@ -28,6 +28,15 @@ class SignalConfig:
 
 
 @dataclass(frozen=True)
+class DisplayConfig:
+    time_per_div_s: float = 0.1
+    volt_per_div_mv: float = 500.0
+    horizontal_offset_s: float = 0.0
+    vertical_center_mv: float = 1650.0
+    auto_range: bool = True
+
+
+@dataclass(frozen=True)
 class SampleFrame:
     sequence: int
     time_ms: int

@@ -1,6 +1,6 @@
 [project]
 name = "simple-scope-pc"
-version = "0.2.1"
+version = "0.3.0"
 description = "Modular PySide6/PyQtGraph oscilloscope host for SimpleOscilloscope."
 requires-python = ">=3.11"
 dependencies = [

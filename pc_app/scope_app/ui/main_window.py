@@ -3,8 +3,10 @@ from __future__ import annotations
 from PySide6 import QtCore, QtWidgets
 
 from ..acquisition.controller import AcquisitionController
+from ..core.models import DisplayConfig
 from ..core.ring_buffer import WaveformRingBuffer
 from ..processing.measurements import calculate_measurements
+from ..storage.export_csv import export_csv
 from .control_panel import ControlPanel
 from .measurement_panel import MeasurementPanel
 from .status_bar import ScopeStatusBar
@@ -14,9 +16,11 @@ from .waveform_view import WaveformView
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, default_source: str, default_baud: int) -> None:
         super().__init__()
-        self.setWindowTitle("SimpleScope PC 0.2.1")
+        self.setWindowTitle("SimpleScope PC 0.3.0")
         self.controller = AcquisitionController()
         self.buffer = WaveformRingBuffer()
+        self.display_config = DisplayConfig()
+        self.paused = False
 
         self.controls = ControlPanel(default_source, default_baud)
         self.waveform = WaveformView()
@@ -38,6 +42,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controls.disconnect_requested.connect(self.disconnect_source)
         self.controls.command_requested.connect(self.controller.send)
         self.controls.signal_requested.connect(self.controller.apply_signal)
+        self.controls.display_requested.connect(self._set_display_config)
+        self.controls.pause_requested.connect(self._set_paused)
+        self.controls.clear_requested.connect(self._clear_buffer)
+        self.controls.export_requested.connect(self._export_csv)
+        self.controls.auto_scale_requested.connect(self._auto_scale)
 
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(33)
@@ -45,6 +54,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.start()
 
         self._apply_theme()
+        self.waveform.set_display_config(self.display_config)
 
     def connect_to_source(self) -> None:
         self.controls._connect()
@@ -71,7 +81,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for kind, payload in self.controller.poll_events():
             if kind == "sample":
                 self.buffer.append(payload)
-                redraw = True
+                redraw = not self.paused
             elif kind == "stats":
                 self.measurements.update_stats(payload)
             elif kind == "error":
@@ -86,6 +96,47 @@ class MainWindow(QtWidgets.QMainWindow):
             time_ms, value_mv, _sequence = self.buffer.arrays()
             self.waveform.update_waveform(time_ms, value_mv)
             self.measurements.update_measurements(calculate_measurements(time_ms, value_mv))
+
+    def _set_display_config(self, config: DisplayConfig) -> None:
+        self.display_config = config
+        self.waveform.set_display_config(config)
+        time_ms, value_mv, _sequence = self.buffer.arrays()
+        self.waveform.update_waveform(time_ms, value_mv)
+
+    def _set_paused(self, paused: bool) -> None:
+        self.paused = paused
+        self.status.set_scope_message("Display paused" if paused else "Display running")
+        if not paused:
+            time_ms, value_mv, _sequence = self.buffer.arrays()
+            self.waveform.update_waveform(time_ms, value_mv)
+
+    def _clear_buffer(self) -> None:
+        self.buffer.clear()
+        self.waveform.update_waveform(*self.buffer.arrays()[:2])
+        self.measurements.update_measurements(calculate_measurements(*self.buffer.arrays()[:2]))
+        self.status.set_scope_message("Buffer cleared")
+
+    def _auto_scale(self) -> None:
+        time_ms, value_mv, _sequence = self.buffer.arrays()
+        config = self.waveform.auto_scale_voltage(value_mv)
+        self.display_config = config
+        self.controls.set_display_values(config)
+        self.waveform.update_waveform(time_ms, value_mv)
+        self.status.set_scope_message("Voltage range auto-scaled")
+
+    def _export_csv(self) -> None:
+        time_ms, value_mv, _sequence = self.buffer.arrays()
+        if time_ms.size == 0:
+            self.status.set_scope_message("No samples to export")
+            return
+        path, _filter = QtWidgets.QFileDialog.getSaveFileName(self, "Export waveform CSV", "waveform.csv", "CSV Files (*.csv)")
+        if not path:
+            return
+        try:
+            export_csv(path, time_ms, value_mv)
+            self.status.set_scope_message(f"Exported {path}")
+        except Exception as exc:  # noqa: BLE001
+            self.status.set_scope_message(f"Export failed: {exc}")
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(
