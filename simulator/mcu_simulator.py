@@ -6,9 +6,17 @@ from __future__ import annotations
 import argparse
 import math
 import socketserver
+import sys
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from pc_app.scope_app.protocol.binary_protocol import BinaryProtocol
 
 
 @dataclass
@@ -21,11 +29,15 @@ class SignalState:
     streaming: bool = True
     sequence: int = 0
     start_time: float = time.monotonic()
+    output_format: str = "BINARY"
 
 
 class SimulatorHandler(socketserver.StreamRequestHandler):
     state = SignalState()
     lock = threading.Lock()
+    version = "0.7.0"
+    binary_block_points = 16
+    binary = BinaryProtocol()
 
     def setup(self) -> None:
         super().setup()
@@ -33,7 +45,7 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
         self._tx_thread = threading.Thread(target=self._tx_loop, daemon=True)
 
     def handle(self) -> None:
-        self._send(f"BOOT,SimpleOscilloscope,0.1.0,SIMULATOR,115200\n")
+        self._send(f"BOOT,SimpleOscilloscope,{self.version},SIMULATOR,115200\n")
         self._send_status()
         self._tx_thread.start()
         while not self._stop.is_set():
@@ -43,9 +55,11 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
             self._handle_command(raw.decode("ascii", errors="ignore").strip())
         self._stop.set()
 
-    def _send(self, text: str) -> None:
+    def _send(self, data: str | bytes) -> None:
         try:
-            self.wfile.write(text.encode("ascii"))
+            if isinstance(data, str):
+                data = data.encode("ascii")
+            self.wfile.write(data)
             self.wfile.flush()
         except OSError:
             self._stop.set()
@@ -57,12 +71,13 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
                 f"STATUS,{state.wave},{state.freq_hz},{state.amp_mv},"
                 f"{state.offset_mv},{state.rate_hz},{'RUN' if state.streaming else 'STOP'}\n"
             )
+            self._send(f"FORMAT,{state.output_format}\n")
 
     def _handle_command(self, command: str) -> None:
         if command == "PING":
-            self._send("PONG,SimpleOscilloscope,0.1.0\n")
+            self._send(f"PONG,SimpleOscilloscope,{self.version}\n")
         elif command == "ID?":
-            self._send("ID,SimpleOscilloscope,SIMULATOR,0.1.0,TCP\n")
+            self._send(f"ID,SimpleOscilloscope,SIMULATOR,{self.version},TCP,BINARY_DATA\n")
         elif command == "STATUS":
             self._send_status()
         elif command == "START":
@@ -95,11 +110,15 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
             elif key == "OFFSET":
                 self.state.offset_mv = max(0, min(3300, int(value)))
             elif key == "RATE":
-                self.state.rate_hz = max(1, min(200, int(value)))
+                self.state.rate_hz = max(1, min(1000, int(value)))
+            elif key == "FORMAT" and value in {"ASCII", "BINARY"}:
+                self.state.output_format = value
             else:
                 self._send("ERR,bad_set\n")
                 return
         self._send(f"OK,{key}\n")
+        if key == "FORMAT":
+            self._send_status()
 
     def _tx_loop(self) -> None:
         while not self._stop.is_set():
@@ -107,9 +126,14 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
                 state = self.state
                 streaming = state.streaming
                 rate_hz = state.rate_hz
+                output_format = state.output_format
             if streaming:
-                self._send_sample()
-            time.sleep(max(1.0 / max(rate_hz, 1), 0.001))
+                if output_format == "BINARY":
+                    self._send_binary_block()
+                else:
+                    self._send_sample()
+            delay_points = self.binary_block_points if output_format == "BINARY" else 1
+            time.sleep(max(delay_points / max(rate_hz, 1), 0.001))
 
     def _send_sample(self) -> None:
         with self.lock:
@@ -124,6 +148,25 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
                 f"{state.wave},{state.freq_hz},{state.amp_mv},{state.offset_mv}\n"
             )
         self._send(line)
+
+    def _send_binary_block(self) -> None:
+        with self.lock:
+            state = self.state
+            start_sequence = state.sequence + 1
+            now = time.monotonic()
+            values = []
+            for index in range(self.binary_block_points):
+                elapsed = (now - state.start_time) + (index / max(state.rate_hz, 1))
+                phase = (elapsed * state.freq_hz) % 1.0
+                value_mv = self._wave_value(state, phase)
+                values.append(int(value_mv * 4095 / 3300))
+            state.sequence += self.binary_block_points
+            frame = self.binary.build_data_frame(
+                sequence=start_sequence,
+                sample_rate_hz=state.rate_hz,
+                values_adc=np.array(values, dtype=np.uint16),
+            )
+        self._send(frame)
 
     @staticmethod
     def _wave_value(state: SignalState, phase: float) -> int:

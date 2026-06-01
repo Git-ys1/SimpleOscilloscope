@@ -6,6 +6,9 @@ from typing import Protocol
 class Transport(Protocol):
     name: str
 
+    def read(self, size: int = 512) -> bytes:
+        ...
+
     def readline(self) -> bytes:
         ...
 

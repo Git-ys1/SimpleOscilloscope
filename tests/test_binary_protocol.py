@@ -2,6 +2,8 @@ import numpy as np
 import pytest
 
 from pc_app.scope_app.protocol.binary_protocol import BinaryProtocol, crc16_ccitt
+from pc_app.scope_app.protocol.stream_decoder import ProtocolStreamDecoder
+from pc_app.scope_app.core.models import AckFrame, SampleBlock, TextFrame
 
 
 def test_crc16_ccitt_known_vector():
@@ -19,3 +21,19 @@ def test_binary_data_frame_round_trip():
     assert block.point_count == 3
     assert block.values_mv[0, 0] == pytest.approx(0.0)
     assert block.values_mv[0, 2] == pytest.approx(3300.0)
+
+
+def test_stream_decoder_accepts_mixed_ascii_and_binary_frames():
+    protocol = BinaryProtocol()
+    decoder = ProtocolStreamDecoder()
+    values_adc = np.array([0, 2048, 4095], dtype=np.uint16)
+    frame = protocol.build_data_frame(sequence=10, sample_rate_hz=1000, values_adc=values_adc)
+
+    events = decoder.feed(b"BOOT,SimpleOscilloscope,0.7.0,FAKE,115200\n" + frame[:5])
+    events += decoder.feed(frame[5:] + b"OK,FORMAT\n")
+
+    assert isinstance(events[0], TextFrame)
+    assert isinstance(events[1], SampleBlock)
+    assert isinstance(events[2], AckFrame)
+    assert events[1].sequence == 10
+    assert events[1].start_time_ms == pytest.approx(9.0)

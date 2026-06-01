@@ -44,6 +44,15 @@ void uart_write_char(char ch)
     USART1->DR = (uint16_t)(uint8_t)ch;
 }
 
+void uart_write_bytes(const uint8_t *data, uint16_t len)
+{
+    uint16_t i;
+
+    for (i = 0U; i < len; i++) {
+        uart_write_char((char)data[i]);
+    }
+}
+
 void uart_write(const char *text)
 {
     while (*text != '\0') {

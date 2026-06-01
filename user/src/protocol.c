@@ -5,10 +5,17 @@
 #include <string.h>
 
 #define RX_LINE_MAX 96U
+#define BINARY_SYNC0 0xA5U
+#define BINARY_SYNC1 0x5AU
+#define BINARY_VERSION 1U
+#define BINARY_TYPE_DATA 1U
+#define BINARY_HEADER_LEN 15U
+#define BINARY_CRC_LEN 2U
 
 static char g_rx_line[RX_LINE_MAX];
 static uint8_t g_rx_len;
 static uint8_t g_streaming;
+static uint8_t g_binary_enabled;
 
 static uint8_t starts_with(const char *text, const char *prefix)
 {
@@ -66,6 +73,52 @@ static void send_status(void)
     uart_write("\r\n");
 }
 
+static void send_format(void)
+{
+    uart_write("FORMAT,");
+    uart_write(g_binary_enabled ? "BINARY" : "ASCII");
+    uart_write("\r\n");
+}
+
+static uint16_t crc16_ccitt(const uint8_t *data, uint16_t len)
+{
+    uint16_t crc = 0xFFFFU;
+    uint16_t i;
+    uint8_t bit;
+
+    for (i = 0U; i < len; i++) {
+        crc ^= (uint16_t)data[i] << 8;
+        for (bit = 0U; bit < 8U; bit++) {
+            if ((crc & 0x8000U) != 0U) {
+                crc = (uint16_t)((crc << 1) ^ 0x1021U);
+            } else {
+                crc = (uint16_t)(crc << 1);
+            }
+        }
+    }
+    return crc;
+}
+
+static void put_u16_le(uint8_t *frame, uint16_t *index, uint16_t value)
+{
+    frame[(*index)++] = (uint8_t)(value & 0xFFU);
+    frame[(*index)++] = (uint8_t)((value >> 8) & 0xFFU);
+}
+
+static void put_u32_le(uint8_t *frame, uint16_t *index, uint32_t value)
+{
+    frame[(*index)++] = (uint8_t)(value & 0xFFU);
+    frame[(*index)++] = (uint8_t)((value >> 8) & 0xFFU);
+    frame[(*index)++] = (uint8_t)((value >> 16) & 0xFFU);
+    frame[(*index)++] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+static uint16_t mv_to_adc(uint16_t value_mv)
+{
+    uint32_t adc = ((uint32_t)value_mv * 4095U) / OSC_MAX_MV;
+    return (uint16_t)adc;
+}
+
 static void handle_set(const char *line)
 {
     uint16_t value;
@@ -94,6 +147,14 @@ static void handle_set(const char *line)
         value = (uint16_t)atoi(line + 9);
         signal_set_sample_rate(value);
         send_ok("RATE");
+    } else if (strcmp(line, "SET FORMAT ASCII") == 0) {
+        g_binary_enabled = 0U;
+        send_ok("FORMAT");
+        send_format();
+    } else if (strcmp(line, "SET FORMAT BINARY") == 0) {
+        g_binary_enabled = 1U;
+        send_ok("FORMAT");
+        send_format();
     } else {
         send_err("bad_set");
     }
@@ -112,11 +173,12 @@ static void handle_line(char *line)
         uart_write(OSC_FW_NAME);
         uart_write(",STM32F103C8T6,");
         uart_write(OSC_FW_VERSION);
-        uart_write(",USART1_PA9_PA10,PA8_PWM\r\n");
+        uart_write(",USART1_PA9_PA10,PA8_PWM+BINARY_DATA\r\n");
     } else if (strcmp(line, "HELP") == 0) {
-        uart_write("HELP,PING|ID?|STATUS|START|STOP|SET WAVE SINE|SQUARE|TRI|SAW|SET FREQ n|SET AMP n|SET OFFSET n|SET RATE n\r\n");
+        uart_write("HELP,PING|ID?|STATUS|START|STOP|SET WAVE SINE|SQUARE|TRI|SAW|SET FREQ n|SET AMP n|SET OFFSET n|SET RATE n|SET FORMAT ASCII|BINARY\r\n");
     } else if (strcmp(line, "STATUS") == 0) {
         send_status();
+        send_format();
     } else if (strcmp(line, "START") == 0) {
         g_streaming = 1U;
         send_ok("START");
@@ -134,6 +196,7 @@ void protocol_init(void)
 {
     g_rx_len = 0U;
     g_streaming = 1U;
+    g_binary_enabled = 1U;
 }
 
 void protocol_poll(void)
@@ -161,6 +224,11 @@ uint8_t protocol_streaming_enabled(void)
     return g_streaming;
 }
 
+uint8_t protocol_binary_enabled(void)
+{
+    return g_binary_enabled;
+}
+
 void protocol_send_boot(void)
 {
     uart_write("BOOT,");
@@ -169,6 +237,7 @@ void protocol_send_boot(void)
     uart_write(OSC_FW_VERSION);
     uart_write(",STM32F103C8T6,115200\r\n");
     send_status();
+    send_format();
 }
 
 void protocol_send_sample(const signal_sample_t *sample)
@@ -188,4 +257,38 @@ void protocol_send_sample(const signal_sample_t *sample)
     uart_write(",");
     write_u32(sample->offset_mv);
     uart_write("\r\n");
+}
+
+void protocol_send_binary_block(uint32_t sequence, uint16_t sample_rate_hz, const uint16_t *values_mv, uint16_t point_count)
+{
+    uint8_t frame[BINARY_HEADER_LEN + (OSC_BINARY_BLOCK_POINTS * 2U) + BINARY_CRC_LEN];
+    uint16_t index = 0U;
+    uint16_t i;
+    uint16_t adc;
+    uint16_t crc;
+
+    if (point_count == 0U) {
+        return;
+    }
+    if (point_count > OSC_BINARY_BLOCK_POINTS) {
+        point_count = OSC_BINARY_BLOCK_POINTS;
+    }
+
+    frame[index++] = BINARY_SYNC0;
+    frame[index++] = BINARY_SYNC1;
+    frame[index++] = BINARY_VERSION;
+    frame[index++] = BINARY_TYPE_DATA;
+    put_u32_le(frame, &index, sequence);
+    put_u32_le(frame, &index, sample_rate_hz);
+    frame[index++] = 1U;
+    put_u16_le(frame, &index, point_count);
+
+    for (i = 0U; i < point_count; i++) {
+        adc = mv_to_adc(values_mv[i]);
+        put_u16_le(frame, &index, adc);
+    }
+
+    crc = crc16_ccitt(frame, index);
+    put_u16_le(frame, &index, crc);
+    uart_write_bytes(frame, index);
 }

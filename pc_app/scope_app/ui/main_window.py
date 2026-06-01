@@ -49,6 +49,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controls.connect_requested.connect(self._connect_config)
         self.controls.disconnect_requested.connect(self.disconnect_source)
         self.controls.command_requested.connect(self.controller.send)
+        self.controls.format_requested.connect(self._set_protocol_format)
         self.controls.signal_requested.connect(self.controller.apply_signal)
         self.controls.display_requested.connect(self._set_display_config)
         self.controls.pause_requested.connect(self._set_paused)
@@ -116,6 +117,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.display_config = config
         self.waveform.set_display_config(config)
         self._refresh_display(force=True)
+
+    def _set_protocol_format(self, output_format: str) -> None:
+        self.buffer.clear()
+        self.single_hold = None
+        self.waveform.update_waveform(*self.buffer.arrays()[:2])
+        self.controller.send(f"SET FORMAT {output_format}")
+        label = "二进制" if output_format == "BINARY" else "文本"
+        self.status.set_scope_message(f"已请求切换为{label}数据格式")
 
     def _set_paused(self, paused: bool) -> None:
         was_paused = self.paused

@@ -7,11 +7,12 @@
 固件启动：
 
 ```text
-BOOT,SimpleOscilloscope,0.1.0,STM32F103C8T6,115200
+BOOT,SimpleOscilloscope,0.7.0,STM32F103C8T6,115200
 STATUS,SINE,5,1200,1650,100,RUN
+FORMAT,BINARY
 ```
 
-样本帧：
+v0.7.0 起，固件默认使用二进制采样块。ASCII 样本帧仍可通过 `SET FORMAT ASCII` 切回，用于串口助手排查：
 
 ```text
 OSC,<seq>,<time_ms>,<value_mv>,<wave>,<freq_hz>,<amp_mv>,<offset_mv>
@@ -41,11 +42,15 @@ SET FREQ 10
 SET AMP 1200
 SET OFFSET 1650
 SET RATE 100
+SET FORMAT BINARY
+SET FORMAT ASCII
 ```
 
-## 预留高速二进制数据帧
+固件 v0.7.0 的采样率命令会被限制在 `1..1000 Hz`。
 
-v0.5.0 起，上位机已经预留并测试了“一帧多点”的二进制解析器，后续固件高速化时可切换到该格式。
+## 高速二进制数据帧
+
+v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。命令、`BOOT`、`STATUS`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
 
 帧结构，小端序：
 

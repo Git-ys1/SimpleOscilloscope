@@ -2,8 +2,8 @@
 
 简易示波器/信号源项目，目标硬件为 `STM32F103C8T6` 最小系统板。仓库包含：
 
-- Keil 固件工程：STM32 通过串口持续输出模拟波形采样帧，并在 `PA8/TIM1_CH1` 输出同一波形的 PWM 占空比版本。
-- Python 上位机：`PySide6 + PyQtGraph + NumPy + pySerial` 模块化桌面应用，通过 CH340 串口、TCP 模拟器或 `fake://` 本地假数据源读取采样帧并绘制波形。
+- Keil 固件工程：STM32 通过串口默认输出二进制采样块，并在 `PA8/TIM1_CH1` 输出同一波形的 PWM 占空比版本。
+- Python 上位机：`PySide6 + PyQtGraph + NumPy + pySerial` 模块化桌面应用，通过 CH340 串口、TCP 模拟器或 `fake://` 本地假数据源读取二进制/ASCII 采样帧并绘制波形。
 - 下位机模拟器：用同一协议模拟单片机，方便没有板子时调试上位机。
 
 ## 快速开始
@@ -64,12 +64,12 @@ tools\flash_stlink.bat
 
 - `pc_app/scope_app/core`：采样模型、连接配置、NumPy 环形缓冲、单位格式化。
 - `pc_app/scope_app/transport`：串口、TCP、`fake://` 本地数据源。
-- `pc_app/scope_app/protocol`：ASCII 协议解析、命令封装，以及二进制协议数据层。
+- `pc_app/scope_app/protocol`：ASCII 命令/状态解析、混合流解码，以及二进制采样块协议。
 - `pc_app/scope_app/acquisition`：采集控制器、后台读取线程、接收统计。
 - `pc_app/scope_app/processing`：测量、显示降采样、触发预留。
 - `pc_app/scope_app/ui`：PySide6 主窗口、PyQtGraph 波形视图、控制面板、测量面板、状态栏。
 
-上位机当前支持时基、垂直档位、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.6.0 起，主界面常用字段已中文化，控制区和测量区改为可滚动侧栏；暂停期间的样本不会在恢复时回放成长线。
+上位机当前支持时基、垂直档位、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.6.0 起，主界面常用字段已中文化，控制区和测量区改为可滚动侧栏；暂停期间的样本不会在恢复时回放成长线。v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机采集链路默认使用二进制采样块，ASCII 仍保留为命令、状态和兼容格式。
 
 运行测试：
 

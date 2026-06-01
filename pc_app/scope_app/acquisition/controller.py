@@ -4,8 +4,8 @@ import queue
 import threading
 
 from ..core.models import AcquisitionStats, ConnectionConfig, RunState, SampleBlock, SampleFrame, SignalConfig
-from ..protocol.ascii_protocol import AsciiProtocol
 from ..protocol.commands import line, set_signal
+from ..protocol.stream_decoder import ProtocolStreamDecoder
 from ..transport.factory import open_transport
 from .statistics import AcquisitionStatistics
 
@@ -15,7 +15,7 @@ class AcquisitionController:
         self.events: "queue.Queue[tuple[str, object]]" = queue.Queue()
         self.state = RunState.DISCONNECTED
         self._transport = None
-        self._protocol = AsciiProtocol()
+        self._decoder = ProtocolStreamDecoder()
         self._stats = AcquisitionStatistics()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -23,6 +23,7 @@ class AcquisitionController:
     def connect(self, config: ConnectionConfig) -> None:
         self.disconnect()
         self._transport = open_transport(config)
+        self._decoder = ProtocolStreamDecoder()
         self._stop.clear()
         self._stats.reset()
         self.state = RunState.CONNECTED
@@ -69,24 +70,26 @@ class AcquisitionController:
         assert self._transport is not None
         while not self._stop.is_set():
             try:
-                raw = self._transport.readline()
+                raw = self._transport.read(512)
             except Exception as exc:
                 self.state = RunState.ERROR
                 self.events.put(("error", str(exc)))
                 return
             if not raw:
                 continue
-            line_text = raw.decode("ascii", errors="replace").strip()
-            event = self._protocol.parse_line(line_text)
-            if event is None:
-                continue
-            if isinstance(event, SampleFrame):
-                self.state = RunState.RUNNING
-                stats = self._stats.update_sample(event)
-                self.events.put(("sample", event))
-                self.events.put(("stats", stats))
-            elif isinstance(event, SampleBlock):
-                self.state = RunState.RUNNING
-                self.events.put(("block", event))
-            else:
-                self.events.put(("frame", event))
+            for event in self._decoder.feed(raw):
+                self._handle_event(event)
+
+    def _handle_event(self, event: object) -> None:
+        if isinstance(event, SampleFrame):
+            self.state = RunState.RUNNING
+            stats = self._stats.update_sample(event)
+            self.events.put(("sample", event))
+            self.events.put(("stats", stats))
+        elif isinstance(event, SampleBlock):
+            self.state = RunState.RUNNING
+            stats = self._stats.update_block(event)
+            self.events.put(("block", event))
+            self.events.put(("stats", stats))
+        else:
+            self.events.put(("frame", event))

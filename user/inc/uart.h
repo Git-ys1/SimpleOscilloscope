@@ -5,6 +5,7 @@
 
 void uart_init(uint32_t baud);
 void uart_write_char(char ch);
+void uart_write_bytes(const uint8_t *data, uint16_t len);
 void uart_write(const char *text);
 uint8_t uart_read_char(char *out);
 

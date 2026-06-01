@@ -10,6 +10,7 @@ class ControlPanel(QtWidgets.QWidget):
     connect_requested = QtCore.Signal(ConnectionConfig)
     disconnect_requested = QtCore.Signal()
     command_requested = QtCore.Signal(str)
+    format_requested = QtCore.Signal(str)
     signal_requested = QtCore.Signal(SignalConfig)
     display_requested = QtCore.Signal(DisplayConfig)
     pause_requested = QtCore.Signal(bool)
@@ -33,6 +34,10 @@ class ControlPanel(QtWidgets.QWidget):
         self.baud.setRange(1200, 2_000_000)
         self.baud.setValue(default_baud)
 
+        self.protocol_format = QtWidgets.QComboBox()
+        self.protocol_format.addItem("二进制 BINARY", "BINARY")
+        self.protocol_format.addItem("文本 ASCII", "ASCII")
+
         self.wave = QtWidgets.QComboBox()
         for label, value in [
             ("正弦 SINE", "SINE"),
@@ -51,7 +56,7 @@ class ControlPanel(QtWidgets.QWidget):
         self.offset.setRange(0, 3300)
         self.offset.setValue(1650)
         self.rate = QtWidgets.QSpinBox()
-        self.rate.setRange(1, 5000)
+        self.rate.setRange(1, 1000)
         self.rate.setValue(100)
 
         self.time_div = QtWidgets.QDoubleSpinBox()
@@ -102,6 +107,7 @@ class ControlPanel(QtWidgets.QWidget):
         disconnect_btn = QtWidgets.QPushButton("断开")
         start_btn = QtWidgets.QPushButton("开始")
         stop_btn = QtWidgets.QPushButton("停止")
+        apply_format_btn = QtWidgets.QPushButton("应用协议")
         apply_btn = QtWidgets.QPushButton("应用信号")
         apply_display_btn = QtWidgets.QPushButton("应用显示")
         pause_btn = QtWidgets.QPushButton("暂停 / 继续")
@@ -115,6 +121,7 @@ class ControlPanel(QtWidgets.QWidget):
         disconnect_btn.clicked.connect(self.disconnect_requested.emit)
         start_btn.clicked.connect(lambda: self.command_requested.emit("START"))
         stop_btn.clicked.connect(lambda: self.command_requested.emit("STOP"))
+        apply_format_btn.clicked.connect(self._apply_format)
         apply_btn.clicked.connect(self._apply_signal)
         apply_display_btn.clicked.connect(self._apply_display)
         pause_btn.setCheckable(True)
@@ -132,6 +139,7 @@ class ControlPanel(QtWidgets.QWidget):
         connection_form = QtWidgets.QFormLayout()
         connection_form.addRow("数据源", self.source)
         connection_form.addRow("波特率", self.baud)
+        connection_form.addRow("数据格式", self.protocol_format)
         layout.addWidget(self._section("连接", connection_form))
 
         buttons = QtWidgets.QGridLayout()
@@ -140,6 +148,7 @@ class ControlPanel(QtWidgets.QWidget):
         buttons.addWidget(start_btn, 1, 0)
         buttons.addWidget(stop_btn, 1, 1)
         layout.addLayout(buttons)
+        layout.addWidget(apply_format_btn)
 
         signal_form = QtWidgets.QFormLayout()
         signal_form.addRow("波形", self.wave)
@@ -191,6 +200,9 @@ class ControlPanel(QtWidgets.QWidget):
                 sample_rate_hz=self.rate.value(),
             )
         )
+
+    def _apply_format(self) -> None:
+        self.format_requested.emit(str(self.protocol_format.currentData()))
 
     def _apply_display(self) -> None:
         self.display_requested.emit(

@@ -9,6 +9,9 @@ class SerialTransport:
 
         self._serial = serial.Serial(port=port, baudrate=baud, timeout=0.25)
 
+    def read(self, size: int = 512) -> bytes:
+        return self._serial.read(size)
+
     def readline(self) -> bytes:
         return self._serial.readline()
 

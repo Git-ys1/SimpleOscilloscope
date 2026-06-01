@@ -4,9 +4,15 @@ import math
 import queue
 import time
 
+import numpy as np
+
+from ..protocol.binary_protocol import BinaryProtocol
+
 
 class FakeTransport:
     name = "fake"
+    VERSION = "0.7.0"
+    BINARY_BLOCK_POINTS = 16
 
     def __init__(self, source: str = "fake://sine") -> None:
         wave = source.split("://", 1)[1].upper() if "://" in source else "SINE"
@@ -19,10 +25,12 @@ class FakeTransport:
         self.sample_rate_hz = 200
         self.streaming = True
         self.sequence = 0
+        self.output_format = "BINARY"
+        self._binary = BinaryProtocol()
         self.started = time.monotonic()
         self._closed = False
         self._outbox: "queue.Queue[bytes]" = queue.Queue()
-        self._enqueue(b"BOOT,SimpleOscilloscope,0.2.1,FAKE,115200\n")
+        self._enqueue(f"BOOT,SimpleOscilloscope,{self.VERSION},FAKE,115200\n".encode("ascii"))
         self._enqueue_status()
 
     def _enqueue(self, data: bytes) -> None:
@@ -35,8 +43,9 @@ class FakeTransport:
                 "ascii"
             )
         )
+        self._enqueue(f"FORMAT,{self.output_format}\n".encode("ascii"))
 
-    def readline(self) -> bytes:
+    def read(self, size: int = 512) -> bytes:
         if self._closed:
             return b""
         try:
@@ -44,10 +53,18 @@ class FakeTransport:
         except queue.Empty:
             pass
 
-        time.sleep(max(1.0 / max(self.sample_rate_hz, 1), 0.001))
+        if self.output_format == "BINARY":
+            time.sleep(max(self.BINARY_BLOCK_POINTS / max(self.sample_rate_hz, 1), 0.001))
+        else:
+            time.sleep(max(1.0 / max(self.sample_rate_hz, 1), 0.001))
         if not self.streaming:
             return b""
+        if self.output_format == "BINARY":
+            return self._sample_block()
         return self._sample_line()
+
+    def readline(self) -> bytes:
+        return self.read()
 
     def write(self, data: bytes) -> None:
         for raw in data.decode("ascii", errors="ignore").splitlines():
@@ -59,9 +76,9 @@ class FakeTransport:
     def _handle(self, command: str) -> None:
         parts = command.split()
         if command == "PING":
-            self._enqueue(b"PONG,SimpleOscilloscope,0.2.1\n")
+            self._enqueue(f"PONG,SimpleOscilloscope,{self.VERSION}\n".encode("ascii"))
         elif command == "ID?":
-            self._enqueue(b"ID,SimpleOscilloscope,FAKE,0.2.1,TCP\n")
+            self._enqueue(f"ID,SimpleOscilloscope,FAKE,{self.VERSION},FAKE,BINARY_DATA\n".encode("ascii"))
         elif command == "STATUS":
             self._enqueue_status()
         elif command == "START":
@@ -89,13 +106,20 @@ class FakeTransport:
             elif key == "OFFSET":
                 self.offset_mv = max(0, min(3300, int(value)))
             elif key == "RATE":
-                self.sample_rate_hz = max(1, min(5000, int(value)))
+                self.sample_rate_hz = max(1, min(1000, int(value)))
+            elif key == "FORMAT":
+                candidate = value.upper()
+                if candidate not in {"ASCII", "BINARY"}:
+                    raise ValueError
+                self.output_format = candidate
             else:
                 raise ValueError
         except ValueError:
             self._enqueue(b"ERR,bad_set\n")
             return
         self._enqueue(f"OK,{key}\n".encode("ascii"))
+        if key == "FORMAT":
+            self._enqueue_status()
 
     def _sample_line(self) -> bytes:
         elapsed = time.monotonic() - self.started
@@ -106,6 +130,22 @@ class FakeTransport:
             f"OSC,{self.sequence},{int(elapsed * 1000)},{value},{self.wave},"
             f"{self.frequency_hz},{self.amplitude_mv},{self.offset_mv}\n"
         ).encode("ascii")
+
+    def _sample_block(self) -> bytes:
+        start_sequence = self.sequence + 1
+        now = time.monotonic()
+        values = []
+        for index in range(self.BINARY_BLOCK_POINTS):
+            elapsed = (now - self.started) + (index / max(self.sample_rate_hz, 1))
+            phase = (elapsed * self.frequency_hz) % 1.0
+            value_mv = self._value(phase)
+            values.append(int(value_mv * 4095 / 3300))
+        self.sequence += self.BINARY_BLOCK_POINTS
+        return self._binary.build_data_frame(
+            sequence=start_sequence,
+            sample_rate_hz=self.sample_rate_hz,
+            values_adc=np.array(values, dtype=np.uint16),
+        )
 
     def _value(self, phase: float) -> int:
         if self.wave == "SQUARE":
