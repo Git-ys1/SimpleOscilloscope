@@ -37,6 +37,14 @@ class DisplayConfig:
 
 
 @dataclass(frozen=True)
+class TriggerConfig:
+    mode: str = "Auto"
+    edge: str = "Rising"
+    level_mv: float = 1650.0
+    pretrigger_ratio: float = 0.2
+
+
+@dataclass(frozen=True)
 class SampleFrame:
     sequence: int
     time_ms: int

@@ -3,9 +3,10 @@ from __future__ import annotations
 from PySide6 import QtCore, QtWidgets
 
 from ..acquisition.controller import AcquisitionController
-from ..core.models import DisplayConfig
+from ..core.models import DisplayConfig, TriggerConfig
 from ..core.ring_buffer import WaveformRingBuffer
 from ..processing.measurements import calculate_measurements
+from ..processing.trigger import TriggerMode, locate_trigger, triggered_reference_time_ms, trigger_marker_x_s
 from ..storage.export_csv import export_csv
 from .control_panel import ControlPanel
 from .measurement_panel import MeasurementPanel
@@ -16,10 +17,12 @@ from .waveform_view import WaveformView
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, default_source: str, default_baud: int) -> None:
         super().__init__()
-        self.setWindowTitle("SimpleScope PC 0.3.0")
+        self.setWindowTitle("SimpleScope PC 0.4.0")
         self.controller = AcquisitionController()
         self.buffer = WaveformRingBuffer()
         self.display_config = DisplayConfig()
+        self.trigger_config = TriggerConfig()
+        self.single_hold: tuple[float, float] | None = None
         self.paused = False
 
         self.controls = ControlPanel(default_source, default_baud)
@@ -47,6 +50,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controls.clear_requested.connect(self._clear_buffer)
         self.controls.export_requested.connect(self._export_csv)
         self.controls.auto_scale_requested.connect(self._auto_scale)
+        self.controls.trigger_requested.connect(self._set_trigger_config)
+        self.controls.trigger_rearm_requested.connect(self._rearm_single)
 
         self.timer = QtCore.QTimer(self)
         self.timer.setInterval(33)
@@ -93,27 +98,24 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.status.set_connection(str(payload))
 
         if redraw:
-            time_ms, value_mv, _sequence = self.buffer.arrays()
-            self.waveform.update_waveform(time_ms, value_mv)
-            self.measurements.update_measurements(calculate_measurements(time_ms, value_mv))
+            self._refresh_display()
 
     def _set_display_config(self, config: DisplayConfig) -> None:
         self.display_config = config
         self.waveform.set_display_config(config)
-        time_ms, value_mv, _sequence = self.buffer.arrays()
-        self.waveform.update_waveform(time_ms, value_mv)
+        self._refresh_display(force=True)
 
     def _set_paused(self, paused: bool) -> None:
         self.paused = paused
         self.status.set_scope_message("Display paused" if paused else "Display running")
         if not paused:
-            time_ms, value_mv, _sequence = self.buffer.arrays()
-            self.waveform.update_waveform(time_ms, value_mv)
+            self._refresh_display(force=True)
 
     def _clear_buffer(self) -> None:
         self.buffer.clear()
         self.waveform.update_waveform(*self.buffer.arrays()[:2])
         self.measurements.update_measurements(calculate_measurements(*self.buffer.arrays()[:2]))
+        self.single_hold = None
         self.status.set_scope_message("Buffer cleared")
 
     def _auto_scale(self) -> None:
@@ -123,6 +125,44 @@ class MainWindow(QtWidgets.QMainWindow):
         self.controls.set_display_values(config)
         self.waveform.update_waveform(time_ms, value_mv)
         self.status.set_scope_message("Voltage range auto-scaled")
+
+    def _set_trigger_config(self, config: TriggerConfig) -> None:
+        self.trigger_config = config
+        self.single_hold = None
+        self.status.set_scope_message(
+            f"Trigger {config.mode} {config.edge} @ {config.level_mv:.1f} mV, pre {config.pretrigger_ratio:.0%}"
+        )
+        self._refresh_display(force=True)
+
+    def _rearm_single(self) -> None:
+        self.single_hold = None
+        self.status.set_scope_message("Single trigger re-armed")
+
+    def _refresh_display(self, force: bool = False) -> None:
+        if self.paused and not force:
+            return
+        time_ms, value_mv, _sequence = self.buffer.arrays()
+        reference = None
+        marker_x = None
+
+        if self.trigger_config.mode == TriggerMode.SINGLE and self.single_hold is not None:
+            reference, trigger_time = self.single_hold
+            marker_x = trigger_marker_x_s(reference, trigger_time)
+        else:
+            trigger_index = locate_trigger(time_ms, value_mv, self.trigger_config)
+            if trigger_index is not None:
+                trigger_time = float(time_ms[trigger_index])
+                reference = triggered_reference_time_ms(trigger_time, self.display_config, self.trigger_config)
+                marker_x = trigger_marker_x_s(reference, trigger_time)
+                if self.trigger_config.mode == TriggerMode.SINGLE:
+                    self.single_hold = (reference, trigger_time)
+                    self.status.set_scope_message("Single trigger captured")
+            elif self.trigger_config.mode == TriggerMode.NORMAL:
+                self.status.set_scope_message("Waiting for trigger")
+                return
+
+        self.waveform.update_waveform(time_ms, value_mv, reference, marker_x)
+        self.measurements.update_measurements(calculate_measurements(time_ms, value_mv))
 
     def _export_csv(self) -> None:
         time_ms, value_mv, _sequence = self.buffer.arrays()

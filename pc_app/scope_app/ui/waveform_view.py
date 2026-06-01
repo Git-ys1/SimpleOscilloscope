@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
+from PySide6 import QtCore
 
 from ..core.models import DisplayConfig
 from ..processing.decimation import decimate_for_display
@@ -19,6 +20,9 @@ class WaveformView(pg.PlotWidget):
         self._curve = self.plot([], [], pen=pg.mkPen("#50e3a4", width=2))
         self._zero_line = pg.InfiniteLine(pos=0, angle=0, pen=pg.mkPen("#526386", width=1))
         self.addItem(self._zero_line)
+        self._trigger_line = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen("#ffcc66", width=1.5, style=QtCore.Qt.DashLine))
+        self._trigger_line.hide()
+        self.addItem(self._trigger_line)
         self.setYRange(0, 3300, padding=0.02)
         self._config = DisplayConfig()
 
@@ -26,13 +30,26 @@ class WaveformView(pg.PlotWidget):
         self._config = config
         self._apply_ranges()
 
-    def update_waveform(self, time_ms: np.ndarray, value_mv: np.ndarray) -> None:
+    def update_waveform(
+        self,
+        time_ms: np.ndarray,
+        value_mv: np.ndarray,
+        reference_time_ms: float | None = None,
+        trigger_x_s: float | None = None,
+    ) -> None:
         if time_ms.size == 0:
             self._curve.setData([], [])
+            self._trigger_line.hide()
             return
-        x = (time_ms - time_ms[-1]) / 1000.0
+        reference = float(time_ms[-1] if reference_time_ms is None else reference_time_ms)
+        x = (time_ms - reference) / 1000.0
         x, y = decimate_for_display(x, value_mv)
         self._curve.setData(x, y)
+        if trigger_x_s is None:
+            self._trigger_line.hide()
+        else:
+            self._trigger_line.setPos(trigger_x_s)
+            self._trigger_line.show()
         self._apply_ranges()
 
     def auto_scale_voltage(self, value_mv: np.ndarray) -> DisplayConfig:

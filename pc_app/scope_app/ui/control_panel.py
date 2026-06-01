@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
-from ..core.models import ConnectionConfig, DisplayConfig, SignalConfig
+from ..core.models import ConnectionConfig, DisplayConfig, SignalConfig, TriggerConfig
 from ..transport.scanner import list_serial_ports
 
 
@@ -16,6 +16,8 @@ class ControlPanel(QtWidgets.QWidget):
     clear_requested = QtCore.Signal()
     export_requested = QtCore.Signal()
     auto_scale_requested = QtCore.Signal()
+    trigger_requested = QtCore.Signal(TriggerConfig)
+    trigger_rearm_requested = QtCore.Signal()
 
     def __init__(self, default_source: str, default_baud: int) -> None:
         super().__init__()
@@ -68,6 +70,18 @@ class ControlPanel(QtWidgets.QWidget):
         self.v_center.setValue(1650.0)
         self.auto_range = QtWidgets.QCheckBox("Auto range")
         self.auto_range.setChecked(True)
+        self.trigger_mode = QtWidgets.QComboBox()
+        self.trigger_mode.addItems(["Auto", "Normal", "Single"])
+        self.trigger_edge = QtWidgets.QComboBox()
+        self.trigger_edge.addItems(["Rising", "Falling"])
+        self.trigger_level = QtWidgets.QDoubleSpinBox()
+        self.trigger_level.setDecimals(1)
+        self.trigger_level.setRange(-3300.0, 6600.0)
+        self.trigger_level.setSingleStep(100.0)
+        self.trigger_level.setValue(1650.0)
+        self.pretrigger = QtWidgets.QSpinBox()
+        self.pretrigger.setRange(0, 95)
+        self.pretrigger.setValue(20)
 
         connect_btn = QtWidgets.QPushButton("Connect")
         disconnect_btn = QtWidgets.QPushButton("Disconnect")
@@ -79,6 +93,8 @@ class ControlPanel(QtWidgets.QWidget):
         clear_btn = QtWidgets.QPushButton("Clear Buffer")
         export_btn = QtWidgets.QPushButton("Export CSV")
         autoscale_btn = QtWidgets.QPushButton("Auto Scale Now")
+        apply_trigger_btn = QtWidgets.QPushButton("Apply Trigger")
+        rearm_trigger_btn = QtWidgets.QPushButton("Re-arm Single")
 
         connect_btn.clicked.connect(self._connect)
         disconnect_btn.clicked.connect(self.disconnect_requested.emit)
@@ -91,6 +107,8 @@ class ControlPanel(QtWidgets.QWidget):
         clear_btn.clicked.connect(self.clear_requested.emit)
         export_btn.clicked.connect(self.export_requested.emit)
         autoscale_btn.clicked.connect(self.auto_scale_requested.emit)
+        apply_trigger_btn.clicked.connect(self._apply_trigger)
+        rearm_trigger_btn.clicked.connect(self.trigger_rearm_requested.emit)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -129,6 +147,15 @@ class ControlPanel(QtWidgets.QWidget):
         layout.addWidget(pause_btn)
         layout.addWidget(clear_btn)
         layout.addWidget(export_btn)
+
+        trigger_form = QtWidgets.QFormLayout()
+        trigger_form.addRow("Mode", self.trigger_mode)
+        trigger_form.addRow("Edge", self.trigger_edge)
+        trigger_form.addRow("Level mV", self.trigger_level)
+        trigger_form.addRow("Pre-trigger %", self.pretrigger)
+        layout.addWidget(self._section("Trigger", trigger_form))
+        layout.addWidget(apply_trigger_btn)
+        layout.addWidget(rearm_trigger_btn)
         layout.addStretch(1)
 
     def _section(self, title: str, form: QtWidgets.QFormLayout) -> QtWidgets.QGroupBox:
@@ -167,3 +194,13 @@ class ControlPanel(QtWidgets.QWidget):
         self.h_offset.setValue(config.horizontal_offset_s)
         self.v_center.setValue(config.vertical_center_mv)
         self.auto_range.setChecked(config.auto_range)
+
+    def _apply_trigger(self) -> None:
+        self.trigger_requested.emit(
+            TriggerConfig(
+                mode=self.trigger_mode.currentText(),
+                edge=self.trigger_edge.currentText(),
+                level_mv=self.trigger_level.value(),
+                pretrigger_ratio=self.pretrigger.value() / 100.0,
+            )
+        )
