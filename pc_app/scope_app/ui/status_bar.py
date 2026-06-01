@@ -6,7 +6,7 @@ from PySide6 import QtWidgets
 class ScopeStatusBar(QtWidgets.QStatusBar):
     def __init__(self) -> None:
         super().__init__()
-        self.connection = QtWidgets.QLabel("Disconnected")
+        self.connection = QtWidgets.QLabel("未连接")
         self.message = QtWidgets.QLabel("")
         self.addWidget(self.connection)
         self.addPermanentWidget(self.message, 1)

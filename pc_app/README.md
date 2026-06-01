@@ -1,6 +1,6 @@
 # SimpleScope PC
 
-`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。
+`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。当前推荐入口只有仓库根目录下的 `tools\run_scope.bat`，后续会继续向普通软件包式安装和启动收束。
 
 ## 分层目标
 
@@ -20,7 +20,7 @@ v0.3.0 起，上位机具备基础示波器显示控制：
 - `H Offset`：水平位置。
 - `V Center`：垂直中心。
 - `Auto range` / `Auto Scale Now`：自动量程。
-- `Pause / Resume`：暂停或恢复显示刷新，采集缓冲仍可继续接收。
+- `暂停 / 继续`：暂停期间样本不会进入显示缓冲，恢复后从新数据继续，避免长时间线段回放。
 - `Clear Buffer`：清空当前波形缓存。
 - `Export CSV`：导出当前环形缓冲里的波形数据。
 
@@ -32,7 +32,7 @@ v0.4.0 起，加入触发系统：
 - `Pre-trigger %`：触发点在屏幕内的预触发位置。
 - `Re-arm Single`：重新武装单次触发。
 
-v0.5.0 起，上位机数据层支持采样块：
+v0.5.0 起，上位机数据层支持采样块；v0.6.0 起，常用操作界面中文化，控制区和测量区使用可滚动侧栏，避免窗口高度不足时控件不可见：
 
 - `SampleBlock`：表示一帧多点、多通道数据。
 - `RecordConfig`：预留采样率、记录长度、触发位置。
@@ -54,7 +54,7 @@ tools\run_scope.bat --source fake://sine --connect
 tools\run_scope.bat --source COM14 --baud 115200 --connect
 ```
 
-连接 TCP 下位机模拟器：
+连接 TCP 下位机模拟器时，上位机入口仍然不变，只是先另开终端启动模拟器：
 
 ```bat
 python simulator\mcu_simulator.py

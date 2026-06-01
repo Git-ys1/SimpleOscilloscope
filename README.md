@@ -8,6 +8,33 @@
 
 ## 快速开始
 
+初始化上位机本地 Python 3.11 环境：
+
+```bat
+tools\setup_pc_env.bat
+```
+
+启动上位机只推荐使用这一个入口：
+
+```bat
+tools\run_scope.bat --source fake://sine --connect
+```
+
+其中 `--source` 可以换成真实 CH340 串口，例如：
+
+```bat
+tools\run_scope.bat --source COM14 --baud 115200 --connect
+```
+
+如果需要连接 TCP 下位机模拟器，先另开一个终端启动模拟器，再把上位机 `--source` 改为 `tcp://127.0.0.1:8765`：
+
+```bat
+python simulator\mcu_simulator.py
+tools\run_scope.bat --source tcp://127.0.0.1:8765 --connect
+```
+
+后续上位机会逐步整理成更像普通软件包的安装和启动方式；当前 README 不再推荐直接运行散落脚本。
+
 编译固件：
 
 ```bat
@@ -26,42 +53,6 @@ Objects\SimpleOscilloscope.hex
 tools\flash_stlink.bat
 ```
 
-启动模拟器：
-
-```bat
-python simulator\mcu_simulator.py
-```
-
-初始化上位机本地 Python 3.11 环境：
-
-```bat
-tools\setup_pc_env.bat
-```
-
-启动上位机连接内置假数据源：
-
-```bat
-tools\run_scope.bat --source fake://sine --connect
-```
-
-启动上位机连接 TCP 模拟器：
-
-```bat
-tools\run_scope.bat --source tcp://127.0.0.1:8765 --connect
-```
-
-启动上位机连接 CH340 串口：
-
-```bat
-tools\run_scope.bat --source COM14 --baud 115200 --connect
-```
-
-兼容入口仍保留：
-
-```bat
-.venv\python.exe pc_app\simple_scope.py --source COM14 --baud 115200
-```
-
 ## 固件结构
 
 - `user/inc`：项目头文件。
@@ -73,12 +64,12 @@ tools\run_scope.bat --source COM14 --baud 115200 --connect
 
 - `pc_app/scope_app/core`：采样模型、连接配置、NumPy 环形缓冲、单位格式化。
 - `pc_app/scope_app/transport`：串口、TCP、`fake://` 本地数据源。
-- `pc_app/scope_app/protocol`：当前 ASCII 协议解析、命令封装，以及后续二进制协议预留。
+- `pc_app/scope_app/protocol`：ASCII 协议解析、命令封装，以及二进制协议数据层。
 - `pc_app/scope_app/acquisition`：采集控制器、后台读取线程、接收统计。
 - `pc_app/scope_app/processing`：测量、显示降采样、触发预留。
 - `pc_app/scope_app/ui`：PySide6 主窗口、PyQtGraph 波形视图、控制面板、测量面板、状态栏。
 
-上位机当前支持 `time/div`、`volt/div`、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.5.0 起，上位机也预留了采样块数据模型和高速二进制协议解析器。
+上位机当前支持时基、垂直档位、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.6.0 起，主界面常用字段已中文化，控制区和测量区改为可滚动侧栏；暂停期间的样本不会在恢复时回放成长线。
 
 运行测试：
 

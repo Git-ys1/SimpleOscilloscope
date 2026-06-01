@@ -13,15 +13,15 @@ class MeasurementPanel(QtWidgets.QWidget):
         layout = QtWidgets.QFormLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         for key, label in [
-            ("points", "Points"),
-            ("vmax", "Vmax"),
-            ("vmin", "Vmin"),
-            ("vpp", "Vpp"),
-            ("avg", "Average"),
-            ("rms", "RMS"),
-            ("freq", "Measured Freq"),
-            ("rate", "Rx Rate"),
-            ("lost", "Lost Samples"),
+            ("points", "点数"),
+            ("vmax", "最大值 Vmax"),
+            ("vmin", "最小值 Vmin"),
+            ("vpp", "峰峰值 Vpp"),
+            ("avg", "平均值"),
+            ("rms", "有效值 RMS"),
+            ("freq", "测得频率"),
+            ("rate", "接收率"),
+            ("lost", "丢样"),
         ]:
             value = QtWidgets.QLabel("--")
             value.setTextInteractionFlags(value.textInteractionFlags() | QtCore.Qt.TextSelectableByMouse)

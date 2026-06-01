@@ -34,7 +34,13 @@ class ControlPanel(QtWidgets.QWidget):
         self.baud.setValue(default_baud)
 
         self.wave = QtWidgets.QComboBox()
-        self.wave.addItems(["SINE", "SQUARE", "TRI", "SAW"])
+        for label, value in [
+            ("正弦 SINE", "SINE"),
+            ("方波 SQUARE", "SQUARE"),
+            ("三角 TRI", "TRI"),
+            ("锯齿 SAW", "SAW"),
+        ]:
+            self.wave.addItem(label, value)
         self.frequency = QtWidgets.QSpinBox()
         self.frequency.setRange(1, 500)
         self.frequency.setValue(5)
@@ -68,12 +74,21 @@ class ControlPanel(QtWidgets.QWidget):
         self.v_center.setRange(-3300.0, 6600.0)
         self.v_center.setSingleStep(100.0)
         self.v_center.setValue(1650.0)
-        self.auto_range = QtWidgets.QCheckBox("Auto range")
+        self.auto_range = QtWidgets.QCheckBox("自动量程")
         self.auto_range.setChecked(True)
         self.trigger_mode = QtWidgets.QComboBox()
-        self.trigger_mode.addItems(["Auto", "Normal", "Single"])
+        for label, value in [
+            ("自动 Auto", "Auto"),
+            ("普通 Normal", "Normal"),
+            ("单次 Single", "Single"),
+        ]:
+            self.trigger_mode.addItem(label, value)
         self.trigger_edge = QtWidgets.QComboBox()
-        self.trigger_edge.addItems(["Rising", "Falling"])
+        for label, value in [
+            ("上升沿 Rising", "Rising"),
+            ("下降沿 Falling", "Falling"),
+        ]:
+            self.trigger_edge.addItem(label, value)
         self.trigger_level = QtWidgets.QDoubleSpinBox()
         self.trigger_level.setDecimals(1)
         self.trigger_level.setRange(-3300.0, 6600.0)
@@ -83,18 +98,18 @@ class ControlPanel(QtWidgets.QWidget):
         self.pretrigger.setRange(0, 95)
         self.pretrigger.setValue(20)
 
-        connect_btn = QtWidgets.QPushButton("Connect")
-        disconnect_btn = QtWidgets.QPushButton("Disconnect")
-        start_btn = QtWidgets.QPushButton("Start")
-        stop_btn = QtWidgets.QPushButton("Stop")
-        apply_btn = QtWidgets.QPushButton("Apply Signal")
-        apply_display_btn = QtWidgets.QPushButton("Apply Display")
-        pause_btn = QtWidgets.QPushButton("Pause / Resume")
-        clear_btn = QtWidgets.QPushButton("Clear Buffer")
-        export_btn = QtWidgets.QPushButton("Export CSV")
-        autoscale_btn = QtWidgets.QPushButton("Auto Scale Now")
-        apply_trigger_btn = QtWidgets.QPushButton("Apply Trigger")
-        rearm_trigger_btn = QtWidgets.QPushButton("Re-arm Single")
+        connect_btn = QtWidgets.QPushButton("连接")
+        disconnect_btn = QtWidgets.QPushButton("断开")
+        start_btn = QtWidgets.QPushButton("开始")
+        stop_btn = QtWidgets.QPushButton("停止")
+        apply_btn = QtWidgets.QPushButton("应用信号")
+        apply_display_btn = QtWidgets.QPushButton("应用显示")
+        pause_btn = QtWidgets.QPushButton("暂停 / 继续")
+        clear_btn = QtWidgets.QPushButton("清空缓冲")
+        export_btn = QtWidgets.QPushButton("导出 CSV")
+        autoscale_btn = QtWidgets.QPushButton("立即自动量程")
+        apply_trigger_btn = QtWidgets.QPushButton("应用触发")
+        rearm_trigger_btn = QtWidgets.QPushButton("重新武装单次")
 
         connect_btn.clicked.connect(self._connect)
         disconnect_btn.clicked.connect(self.disconnect_requested.emit)
@@ -115,9 +130,9 @@ class ControlPanel(QtWidgets.QWidget):
         layout.setSpacing(12)
 
         connection_form = QtWidgets.QFormLayout()
-        connection_form.addRow("Source", self.source)
-        connection_form.addRow("Baud", self.baud)
-        layout.addWidget(self._section("Connection", connection_form))
+        connection_form.addRow("数据源", self.source)
+        connection_form.addRow("波特率", self.baud)
+        layout.addWidget(self._section("连接", connection_form))
 
         buttons = QtWidgets.QGridLayout()
         buttons.addWidget(connect_btn, 0, 0)
@@ -127,21 +142,21 @@ class ControlPanel(QtWidgets.QWidget):
         layout.addLayout(buttons)
 
         signal_form = QtWidgets.QFormLayout()
-        signal_form.addRow("Wave", self.wave)
-        signal_form.addRow("Frequency Hz", self.frequency)
-        signal_form.addRow("Amplitude mV", self.amplitude)
-        signal_form.addRow("Offset mV", self.offset)
-        signal_form.addRow("Rate Hz", self.rate)
-        layout.addWidget(self._section("Signal Source", signal_form))
+        signal_form.addRow("波形", self.wave)
+        signal_form.addRow("频率 Hz", self.frequency)
+        signal_form.addRow("幅度 mV", self.amplitude)
+        signal_form.addRow("偏置 mV", self.offset)
+        signal_form.addRow("采样率 Hz", self.rate)
+        layout.addWidget(self._section("信号源", signal_form))
         layout.addWidget(apply_btn)
 
         display_form = QtWidgets.QFormLayout()
-        display_form.addRow("Time / div (s)", self.time_div)
-        display_form.addRow("Volt / div (mV)", self.volt_div)
-        display_form.addRow("H Offset (s)", self.h_offset)
-        display_form.addRow("V Center (mV)", self.v_center)
+        display_form.addRow("时基 s/div", self.time_div)
+        display_form.addRow("垂直档 mV/div", self.volt_div)
+        display_form.addRow("水平位置 s", self.h_offset)
+        display_form.addRow("垂直中心 mV", self.v_center)
         display_form.addRow("", self.auto_range)
-        layout.addWidget(self._section("Display", display_form))
+        layout.addWidget(self._section("显示", display_form))
         layout.addWidget(apply_display_btn)
         layout.addWidget(autoscale_btn)
         layout.addWidget(pause_btn)
@@ -149,11 +164,11 @@ class ControlPanel(QtWidgets.QWidget):
         layout.addWidget(export_btn)
 
         trigger_form = QtWidgets.QFormLayout()
-        trigger_form.addRow("Mode", self.trigger_mode)
-        trigger_form.addRow("Edge", self.trigger_edge)
-        trigger_form.addRow("Level mV", self.trigger_level)
-        trigger_form.addRow("Pre-trigger %", self.pretrigger)
-        layout.addWidget(self._section("Trigger", trigger_form))
+        trigger_form.addRow("模式", self.trigger_mode)
+        trigger_form.addRow("边沿", self.trigger_edge)
+        trigger_form.addRow("触发电平 mV", self.trigger_level)
+        trigger_form.addRow("预触发 %", self.pretrigger)
+        layout.addWidget(self._section("触发", trigger_form))
         layout.addWidget(apply_trigger_btn)
         layout.addWidget(rearm_trigger_btn)
         layout.addStretch(1)
@@ -169,7 +184,7 @@ class ControlPanel(QtWidgets.QWidget):
     def _apply_signal(self) -> None:
         self.signal_requested.emit(
             SignalConfig(
-                wave=self.wave.currentText(),
+                wave=str(self.wave.currentData()),
                 frequency_hz=self.frequency.value(),
                 amplitude_mv=self.amplitude.value(),
                 offset_mv=self.offset.value(),
@@ -198,8 +213,8 @@ class ControlPanel(QtWidgets.QWidget):
     def _apply_trigger(self) -> None:
         self.trigger_requested.emit(
             TriggerConfig(
-                mode=self.trigger_mode.currentText(),
-                edge=self.trigger_edge.currentText(),
+                mode=str(self.trigger_mode.currentData()),
+                edge=str(self.trigger_edge.currentData()),
                 level_mv=self.trigger_level.value(),
                 pretrigger_ratio=self.pretrigger.value() / 100.0,
             )

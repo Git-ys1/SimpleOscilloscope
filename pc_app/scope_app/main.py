@@ -23,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("SimpleOscilloscope")
 
     window = MainWindow(default_source=args.source, default_baud=args.baud)
-    window.resize(1280, 760)
+    window.resize(1360, 800)
     window.show()
     if args.connect:
         window.connect_to_source()

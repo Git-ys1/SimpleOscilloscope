@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
+from .. import __version__
 from ..acquisition.controller import AcquisitionController
 from ..core.models import DisplayConfig, TriggerConfig
 from ..core.ring_buffer import WaveformRingBuffer
@@ -17,7 +18,8 @@ from .waveform_view import WaveformView
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, default_source: str, default_baud: int) -> None:
         super().__init__()
-        self.setWindowTitle("SimpleScope PC 0.4.0")
+        self.setWindowTitle(f"SimpleScope PC v{__version__}")
+        self.setMinimumSize(980, 600)
         self.controller = AcquisitionController()
         self.buffer = WaveformRingBuffer()
         self.display_config = DisplayConfig()
@@ -31,14 +33,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status = ScopeStatusBar()
         self.setStatusBar(self.status)
 
+        control_scroll = self._scroll_area(self.controls, minimum_width=320)
+        measurement_scroll = self._scroll_area(self.measurements, minimum_width=240)
+
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        splitter.addWidget(self.controls)
+        splitter.addWidget(control_scroll)
         splitter.addWidget(self.waveform)
-        splitter.addWidget(self.measurements)
+        splitter.addWidget(measurement_scroll)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([260, 760, 260])
+        splitter.setSizes([330, 820, 260])
         self.setCentralWidget(splitter)
 
         self.controls.connect_requested.connect(self._connect_config)
@@ -66,7 +71,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def disconnect_source(self) -> None:
         self.controller.disconnect()
-        self.status.set_connection("Disconnected")
+        self.status.set_connection("未连接")
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
         self.controller.disconnect()
@@ -76,24 +81,28 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             self.buffer.clear()
             self.controller.connect(config)
-            self.status.set_connection(f"Connected: {config.source}")
+            self.status.set_connection(f"已连接：{config.source}")
         except Exception as exc:  # noqa: BLE001 - user-facing status
-            self.status.set_connection("Connection failed")
+            self.status.set_connection("连接失败")
             self.status.set_scope_message(str(exc))
 
     def _drain_events(self) -> None:
         redraw = False
         for kind, payload in self.controller.poll_events():
             if kind == "sample":
+                if self.paused:
+                    continue
                 self.buffer.append(payload)
-                redraw = not self.paused
+                redraw = True
             elif kind == "block":
+                if self.paused:
+                    continue
                 self.buffer.append_block(payload)
-                redraw = not self.paused
+                redraw = True
             elif kind == "stats":
                 self.measurements.update_stats(payload)
             elif kind == "error":
-                self.status.set_connection("Error")
+                self.status.set_connection("错误")
                 self.status.set_scope_message(str(payload))
             elif kind == "frame":
                 self.status.set_scope_message(str(payload))
@@ -109,17 +118,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_display(force=True)
 
     def _set_paused(self, paused: bool) -> None:
+        was_paused = self.paused
         self.paused = paused
-        self.status.set_scope_message("Display paused" if paused else "Display running")
-        if not paused:
-            self._refresh_display(force=True)
+        if paused:
+            self.status.set_scope_message("显示已暂停，暂停期间的采样不会回放")
+            return
+
+        if was_paused:
+            self.buffer.clear()
+            self.single_hold = None
+            self.waveform.update_waveform(*self.buffer.arrays()[:2])
+            self.measurements.update_measurements(calculate_measurements(*self.buffer.arrays()[:2]))
+            self.status.set_scope_message("显示已继续，已丢弃暂停期间样本")
+            return
+
+        self.status.set_scope_message("显示运行中")
 
     def _clear_buffer(self) -> None:
         self.buffer.clear()
         self.waveform.update_waveform(*self.buffer.arrays()[:2])
         self.measurements.update_measurements(calculate_measurements(*self.buffer.arrays()[:2]))
         self.single_hold = None
-        self.status.set_scope_message("Buffer cleared")
+        self.status.set_scope_message("缓冲已清空")
 
     def _auto_scale(self) -> None:
         time_ms, value_mv, _sequence = self.buffer.arrays()
@@ -127,19 +147,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.display_config = config
         self.controls.set_display_values(config)
         self.waveform.update_waveform(time_ms, value_mv)
-        self.status.set_scope_message("Voltage range auto-scaled")
+        self.status.set_scope_message("垂直量程已自动调整")
 
     def _set_trigger_config(self, config: TriggerConfig) -> None:
         self.trigger_config = config
         self.single_hold = None
         self.status.set_scope_message(
-            f"Trigger {config.mode} {config.edge} @ {config.level_mv:.1f} mV, pre {config.pretrigger_ratio:.0%}"
+            f"触发：{self._trigger_mode_label(config.mode)} {self._trigger_edge_label(config.edge)} "
+            f"@ {config.level_mv:.1f} mV，预触发 {config.pretrigger_ratio:.0%}"
         )
         self._refresh_display(force=True)
 
     def _rearm_single(self) -> None:
         self.single_hold = None
-        self.status.set_scope_message("Single trigger re-armed")
+        self.status.set_scope_message("单次触发已重新武装")
 
     def _refresh_display(self, force: bool = False) -> None:
         if self.paused and not force:
@@ -159,9 +180,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 marker_x = trigger_marker_x_s(reference, trigger_time)
                 if self.trigger_config.mode == TriggerMode.SINGLE:
                     self.single_hold = (reference, trigger_time)
-                    self.status.set_scope_message("Single trigger captured")
+                    self.status.set_scope_message("单次触发已捕获")
             elif self.trigger_config.mode == TriggerMode.NORMAL:
-                self.status.set_scope_message("Waiting for trigger")
+                self.status.set_scope_message("等待触发")
                 return
 
         self.waveform.update_waveform(time_ms, value_mv, reference, marker_x)
@@ -170,16 +191,31 @@ class MainWindow(QtWidgets.QMainWindow):
     def _export_csv(self) -> None:
         time_ms, value_mv, _sequence = self.buffer.arrays()
         if time_ms.size == 0:
-            self.status.set_scope_message("No samples to export")
+            self.status.set_scope_message("没有可导出的采样")
             return
-        path, _filter = QtWidgets.QFileDialog.getSaveFileName(self, "Export waveform CSV", "waveform.csv", "CSV Files (*.csv)")
+        path, _filter = QtWidgets.QFileDialog.getSaveFileName(self, "导出波形 CSV", "waveform.csv", "CSV Files (*.csv)")
         if not path:
             return
         try:
             export_csv(path, time_ms, value_mv)
-            self.status.set_scope_message(f"Exported {path}")
+            self.status.set_scope_message(f"已导出 {path}")
         except Exception as exc:  # noqa: BLE001
-            self.status.set_scope_message(f"Export failed: {exc}")
+            self.status.set_scope_message(f"导出失败：{exc}")
+
+    def _scroll_area(self, widget: QtWidgets.QWidget, minimum_width: int) -> QtWidgets.QScrollArea:
+        area = QtWidgets.QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        area.setWidget(widget)
+        area.setMinimumWidth(minimum_width)
+        return area
+
+    def _trigger_mode_label(self, mode: str) -> str:
+        return {"Auto": "自动", "Normal": "普通", "Single": "单次"}.get(mode, mode)
+
+    def _trigger_edge_label(self, edge: str) -> str:
+        return {"Rising": "上升沿", "Falling": "下降沿"}.get(edge, edge)
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(
