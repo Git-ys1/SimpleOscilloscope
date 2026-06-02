@@ -14,6 +14,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+.pytest_tmp/
 pytest_tmp/
 test_settings_tmp/
 
