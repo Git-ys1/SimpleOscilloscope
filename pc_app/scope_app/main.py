@@ -10,7 +10,7 @@ from .ui.main_window import MainWindow
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SimpleScope PC oscilloscope")
-    parser.add_argument("--source", default="fake://sine", help="COM port, tcp://host:port, or fake://sine")
+    parser.add_argument("--source", default="", help="COM port, tcp://host:port, or fake://sine")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--connect", action="store_true", help="Connect immediately after the UI starts")
     return parser

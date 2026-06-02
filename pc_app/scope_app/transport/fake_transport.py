@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import queue
+import random
 import time
 
 import numpy as np
@@ -17,7 +18,7 @@ class FakeTransport:
     def __init__(self, source: str = "fake://sine") -> None:
         wave = source.split("://", 1)[1].upper() if "://" in source else "SINE"
         self.wave = "TRI" if wave == "TRIANGLE" else wave
-        if self.wave not in {"SINE", "SQUARE", "TRI", "SAW"}:
+        if self.wave not in {"SINE", "SQUARE", "TRI", "SAW", "NOISE", "MIXED"}:
             self.wave = "SINE"
         self.frequency_hz = 5
         self.amplitude_mv = 1200
@@ -96,7 +97,7 @@ class FakeTransport:
         try:
             if key == "WAVE":
                 candidate = "TRI" if value.upper() == "TRIANGLE" else value.upper()
-                if candidate not in {"SINE", "SQUARE", "TRI", "SAW"}:
+                if candidate not in {"SINE", "SQUARE", "TRI", "SAW", "NOISE", "MIXED"}:
                     raise ValueError
                 self.wave = candidate
             elif key == "FREQ":
@@ -154,6 +155,12 @@ class FakeTransport:
             normalized = 4.0 * abs(phase - 0.5) - 1.0
         elif self.wave == "SAW":
             normalized = 2.0 * phase - 1.0
+        elif self.wave == "NOISE":
+            normalized = random.uniform(-1.0, 1.0)
+        elif self.wave == "MIXED":
+            harmonic = 0.35 * math.sin(6.0 * math.pi * phase)
+            normalized = math.sin(2.0 * math.pi * phase) + harmonic + random.uniform(-0.08, 0.08)
+            normalized = max(-1.0, min(1.0, normalized))
         else:
             normalized = math.sin(2.0 * math.pi * phase)
         return max(0, min(3300, int(self.offset_mv + self.amplitude_mv * normalized)))

@@ -2,41 +2,36 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
-from ..core.models import MeasurementSnapshot
-from ..core.units import format_frequency, format_voltage
+from ...core.models import MeasurementSnapshot
+from ...core.units import format_frequency, format_voltage
 
 
 class MeasurementPanel(QtWidgets.QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.labels: dict[str, QtWidgets.QLabel] = {}
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(16)
+        self.source = QtWidgets.QComboBox()
+        self.source.addItems(["Visible Window", "Full Buffer", "Last Triggered Record"])
+
+        layout = QtWidgets.QFormLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.addRow("Source", self.source)
         for key, label in [
-            ("vpp", "Vpp"),
             ("vmax", "Vmax"),
             ("vmin", "Vmin"),
-            ("avg", "Avg"),
-            ("rms_dc", "RMS DC"),
-            ("rms_ac", "RMS AC"),
-            ("freq", "Freq"),
-            ("duty", "Duty"),
-            ("points", "Count"),
+            ("vpp", "Vpp"),
+            ("avg", "Vavg"),
+            ("rms_dc", "Vrms DC"),
+            ("rms_ac", "Vrms AC"),
+            ("freq", "Frequency"),
+            ("period", "Period"),
+            ("duty", "Duty Cycle"),
+            ("points", "Sample Count"),
         ]:
-            item = QtWidgets.QWidget()
-            item_layout = QtWidgets.QVBoxLayout(item)
-            item_layout.setContentsMargins(0, 0, 0, 0)
-            name = QtWidgets.QLabel(label)
-            name.setStyleSheet("color: #8ea1c4; font-size: 8pt;")
             value = QtWidgets.QLabel("--")
-            value.setStyleSheet("font-weight: 600;")
             value.setTextInteractionFlags(value.textInteractionFlags() | QtCore.Qt.TextSelectableByMouse)
             self.labels[key] = value
-            item_layout.addWidget(name)
-            item_layout.addWidget(value)
-            layout.addWidget(item)
-        layout.addStretch(1)
+            layout.addRow(label, value)
 
     def update_measurements(self, snapshot: MeasurementSnapshot) -> None:
         self.labels["points"].setText(str(snapshot.points))
@@ -47,4 +42,5 @@ class MeasurementPanel(QtWidgets.QWidget):
         self.labels["rms_dc"].setText(format_voltage(snapshot.v_rms_dc_mv))
         self.labels["rms_ac"].setText(format_voltage(snapshot.v_rms_ac_mv))
         self.labels["freq"].setText(format_frequency(snapshot.frequency_hz))
+        self.labels["period"].setText(f"{snapshot.period_ms:.3g} ms" if snapshot.period_ms else "--")
         self.labels["duty"].setText(f"{snapshot.duty_cycle_percent:.1f}%" if snapshot.duty_cycle_percent else "--")

@@ -115,6 +115,7 @@ class TextFrame:
 @dataclass(frozen=True)
 class AcquisitionStats:
     received_samples: int = 0
+    received_blocks: int = 0
     lost_samples: int = 0
     sample_rate_hz: float = 0.0
     frames_per_second: float = 0.0
@@ -127,5 +128,12 @@ class MeasurementSnapshot:
     v_max_mv: float
     v_pp_mv: float
     v_avg_mv: float
-    v_rms_mv: float
+    v_rms_dc_mv: float
+    v_rms_ac_mv: float
     frequency_hz: float
+    period_ms: float = 0.0
+    duty_cycle_percent: float = 0.0
+
+    @property
+    def v_rms_mv(self) -> float:
+        return self.v_rms_dc_mv

@@ -46,7 +46,7 @@ class AsciiProtocol:
                 return AckFrame(parts[1])
             if kind == "ERR" and len(parts) >= 2:
                 return ErrorFrame(parts[1])
-            if kind in {"PONG", "HELP"}:
+            if kind in {"PONG", "HELP", "FORMAT"}:
                 return TextFrame(kind, text)
         except ValueError as exc:
             return ErrorFrame(f"parse:{exc}")

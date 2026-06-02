@@ -11,6 +11,7 @@ class AcquisitionStatistics:
 
     def reset(self) -> None:
         self.received_samples = 0
+        self.received_blocks = 0
         self.lost_samples = 0
         self._last_sequence: int | None = None
         self._window_started = time.monotonic()
@@ -29,6 +30,7 @@ class AcquisitionStatistics:
         now = time.monotonic()
         point_count = max(1, int(point_count))
         self.received_samples += point_count
+        self.received_blocks += 1
         self._window_samples += point_count
         self._window_frames += 1
         if self._last_sequence is not None and sequence > self._last_sequence + 1:
@@ -47,6 +49,7 @@ class AcquisitionStatistics:
     def snapshot(self) -> AcquisitionStats:
         return AcquisitionStats(
             received_samples=self.received_samples,
+            received_blocks=self.received_blocks,
             lost_samples=self.lost_samples,
             sample_rate_hz=self._sample_rate_hz,
             frames_per_second=self._frames_per_second,

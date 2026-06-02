@@ -1,0 +1,1056 @@
+# SimpleOscilloscope 上位机产品化打磨任务书 v0.8.0
+
+## 0. 本轮总目标
+
+当前仓库已经实现了 STM32F103C8T6 固件、二进制采样协议、Python 上位机、串口/TCP/fake 数据源、基础绘图和基础测量。本轮不要推倒重写底层，不要继续零散补按钮，而是把 `pc_app/scope_app` 从“开发调试工具”打磨成“像示波器的上位机软件雏形成品”。
+
+最终目标：
+
+1. 打开软件后，第一眼像一个简易数字示波器，而不是串口绘图脚本。
+2. 主窗口结构专业：顶部工具栏、中央示波器屏幕、右侧 Dock 面板、底部状态栏。
+3. 控制逻辑清晰：连接、采集、显示、触发、测量、信号源分区明确。
+4. 架构保持可扩展：UI 不直接读串口，不直接解析协议，不直接处理采样点。
+5. 保留当前二进制协议、fake 数据源、TCP 模拟器、串口连接能力。
+6. 不能复制任何 GPL 项目代码，只学习结构、功能组织、交互方式和术语。
+
+## 1. 必须参考的开源项目
+
+本轮请对照学习这些项目，但不要复制代码。
+
+### 1.1 OpenHantek6022
+
+参考链接：
+
+https://github.com/OpenHantek/OpenHantek6022
+https://raw.githubusercontent.com/OpenHantek/OpenHantek6022/main/docs/developer_info.md
+
+需要学习的点：
+
+1. core 和 GUI 分离。
+2. 设备通信、采集、触发、后处理放在核心层。
+3. GUI 负责控件、Dock、配置、渲染、导出入口。
+4. MainWindow 不承担业务计算，只连接信号和槽。
+5. 支持 Demo Mode。
+6. 底部显示每个通道的典型测量值。
+7. 有触发模式状态显示：Normal / Auto / Single。
+8. 有导出 CSV、图片、打印等能力。
+9. 持久化保存设置。
+10. 支持 Dock 可调整布局。
+
+迁移到本项目时对应为：
+
+* `acquisition`：采集核心。
+* `protocol`：协议核心。
+* `processing`：后处理核心。
+* `ui`：只做视图和交互。
+* `storage`：导出。
+* `core/settings.py` 或新增 `core/app_settings.py`：保存软件设置。
+* `ui/main_window.py`：只做布局和连接，不写串口读取、不写协议解析、不写复杂算法。
+
+### 1.2 PulseView / sigrok
+
+参考链接：
+
+https://sigrok.org/wiki/PulseView
+https://github.com/sigrokproject/pulseview
+https://github.com/DreamSourceLab/DSView
+
+需要学习的点：
+
+1. 信号视图应该支持不同 trace，而不是只画一条普通折线。
+2. 后期可以支持 trace group，比如模拟通道、逻辑通道、协议解码结果分层显示。
+3. 显示层要考虑缩放性能，不能永远把所有点直接画出来。
+4. 协议解码、测量、分析应该作为附加层，不应该侵入基础采集链路。
+
+迁移到本项目时对应为：
+
+* 当前先实现单通道 CH1。
+* 但数据模型和 UI 命名要预留多通道：
+
+  * `ChannelState`
+  * `ChannelDisplayConfig`
+  * `Trace`
+  * `TraceView`
+* `waveform_view.py` 不要写死只有一个通道的所有逻辑。
+* 后续可扩展 `logic_analyzer` 和 `protocol_decoder`，本轮只预留结构，不实现复杂解码。
+
+### 1.3 Analog Devices Scopy
+
+参考链接：
+
+https://github.com/analogdevicesinc/scopy
+https://analogdevicesinc.github.io/scopy/plugins/index.html
+https://analogdevicesinc.github.io/scopy/plugins/m2k/oscilloscope.html
+
+需要学习的点：
+
+1. 仪器软件可以是多工具平台。
+2. 插件是用户和设备之间的中间层。
+3. 示波器界面应该是中央信号图 + 控制面板。
+4. 同一个软件未来可以有：
+
+   * Oscilloscope
+   * Signal Generator
+   * Spectrum Analyzer
+   * Logic Analyzer
+   * Datalogger
+5. 本项目目前只做 Oscilloscope，但不要把架构写死。
+
+迁移到本项目时对应为：
+
+* 当前主工具叫 `OscilloscopeTool` 或 `ScopeWorkspace`。
+* 信号源控制要单独叫 `Signal Generator`，不能和采集设置混在一起。
+* 后期如果增加信号发生器、频谱、数据记录，不应该破坏当前示波器模块。
+
+### 1.4 Scoppy
+
+参考链接：
+
+https://github.com/fhdm-dev/scoppy
+https://oscilloscope.fhdm.xyz/
+
+需要学习的点：
+
+1. 低成本 MCU 示波器也必须有清楚的用户引导。
+2. 必须明确硬件输入限制。
+3. 必须有 Getting Started / 接线说明 / 安全提示。
+4. 没有模拟前端时，只能安全测 0–3.3V。
+5. 要把“不能测市电、不能测负压、不能超过 3.3V”显示出来。
+
+迁移到本项目时对应为：
+
+* 首次启动弹出安全提示。
+* Help 菜单里加入“接线与安全说明”。
+* 状态栏或 Welcome 页显示：
+
+  * 当前 ADC 输入范围：0–3.3V
+  * 当前假设：PA0 / ADC1_IN0
+  * 串口：USART1 PA9/PA10
+  * 烧录调试：SWD PA13/PA14
+* README 加截图和接线图占位说明。
+
+### 1.5 Osqoop
+
+参考链接：
+
+https://github.com/stephanemagnenat/osqoop
+
+需要学习的点：
+
+1. 软件示波器可以抽象为：
+
+   * DataSource
+   * Processing
+   * Display
+2. 不同硬件来源不应该影响上层 UI。
+3. 实时信号处理应该是可插拔的处理链。
+
+迁移到本项目时对应为：
+
+* 当前 `transport` + `protocol` + `acquisition` 合起来就是 DataSource。
+* 当前 `processing` 是处理链。
+* 当前 `ui/waveform_view.py` 是显示层。
+* 需要明确这个数据流，不允许 UI 绕过它直接拿串口数据。
+
+## 2. 当前仓库现状判断
+
+当前仓库已经具备这些基础：
+
+1. `pc_app/scope_app/core`
+2. `pc_app/scope_app/transport`
+3. `pc_app/scope_app/protocol`
+4. `pc_app/scope_app/acquisition`
+5. `pc_app/scope_app/processing`
+6. `pc_app/scope_app/ui`
+7. `pc_app/scope_app/storage`
+8. `docs/protocol.md`
+9. `tools/run_scope.bat`
+10. `tools/build_keil.bat`
+11. `tools/flash_stlink.bat`
+12. `fake://sine`
+13. `tcp://127.0.0.1:8765`
+14. 默认二进制采样帧
+
+所以本轮禁止做以下事情：
+
+1. 禁止推倒 `scope_app` 分层重新写成一个脚本。
+2. 禁止把串口读取写进 `main_window.py`。
+3. 禁止把协议解析写进 UI 控件。
+4. 禁止为了界面好看破坏现有测试。
+5. 禁止删除 `fake://` 和 TCP 模拟器能力。
+6. 禁止复制 OpenHantek / PulseView / DSView / Scopy / Osqoop 的 GPL 代码。
+7. 禁止一次性做过大不可验证改动。
+
+## 3. 本轮版本目标
+
+版本建议命名：
+
+`v0.8.0-ui-productization`
+
+本轮完成后，README 里可以描述为：
+
+SimpleScope PC v0.8.0 将上位机从工程调试工具升级为示波器软件雏形：采用示波器式主界面、中央波形屏幕、Dock 控制面板、运行状态角标、测量栏、安全提示、Demo Mode 和设置持久化，为后续多通道、触发增强、频谱分析和数据记录打基础。
+
+## 4. 目标 UI 布局
+
+主窗口必须改为下面结构：
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ 顶部工具栏：Connect | Run | Stop | Single | AutoSet | Demo | Export │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  中央视波器屏幕 / Scope Display                              │
+│                                                              │
+│  - 黑色或深色背景                                             │
+│  - 10 x 8 主网格                                              │
+│  - CH1 波形                                                   │
+│  - 触发电平线                                                 │
+│  - 触发位置标记                                               │
+│  - 左上角 CH1 / Volt-div / Coupling / Probe                   │
+│  - 上方或右上角 RUN / STOP / WAIT / TRIG 状态                 │
+│  - 下方或角落显示 time/div、sample rate、record length        │
+│                                                              │
+├───────────────────────────────┬──────────────────────────────┤
+│ 可选底部测量栏                 │ 右侧 Dock / 可滚动设置区       │
+│ Vpp Vmax Vmin Avg RMS Freq Duty│ Connection                   │
+│                               │ Acquisition                  │
+│                               │ Display                      │
+│                               │ Trigger                      │
+│                               │ Measurements                 │
+│                               │ Signal Generator             │
+├───────────────────────────────┴──────────────────────────────┤
+│ 状态栏：source | baud | protocol | fps | sample rate | dropped │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## 5. 需要新增或重构的文件
+
+尽量小步提交，不要一口气全改完。推荐文件组织如下。
+
+### 5.1 UI 外观和主题
+
+新增：
+
+```text
+pc_app/scope_app/ui/theme.py
+```
+
+职责：
+
+1. 定义深色示波器主题。
+2. 定义颜色常量：
+
+   * 背景色
+   * 主网格线
+   * 次网格线
+   * CH1 波形色
+   * 触发线色
+   * 文本色
+   * RUN 状态色
+   * STOP 状态色
+   * ERROR 状态色
+3. 定义统一字体和控件间距。
+4. 所有 UI 文件从这里拿颜色，不要到处写死颜色。
+
+### 5.2 主窗口 Shell
+
+重构：
+
+```text
+pc_app/scope_app/ui/main_window.py
+```
+
+要求：
+
+1. MainWindow 只负责：
+
+   * 创建菜单栏
+   * 创建工具栏
+   * 创建中央波形区
+   * 创建 Dock 面板
+   * 创建状态栏
+   * 连接信号和槽
+2. MainWindow 不允许：
+
+   * 直接操作 serial
+   * 直接解析二进制协议
+   * 直接计算 Vpp/RMS/Frequency
+   * 直接写入 ring buffer 的内部数组
+3. 参考 OpenHantek 思路：MainWindow 只做 core 和 GUI 之间的连接层。
+
+### 5.3 示波器屏幕组件
+
+重构或新增：
+
+```text
+pc_app/scope_app/ui/waveform_view.py
+```
+
+或者新增：
+
+```text
+pc_app/scope_app/ui/scope_screen.py
+```
+
+要求：
+
+1. 使用 PyQtGraph。
+2. 背景为深色。
+3. 做出示波器网格：
+
+   * 横向 10 大格
+   * 纵向 8 大格
+   * 可以有细网格
+4. 支持显示：
+
+   * CH1 波形
+   * 零电平线
+   * 触发电平线
+   * 触发位置标记
+   * 当前运行状态角标
+   * time/div
+   * volt/div
+   * sample rate
+5. UI 刷新频率和采样率分离：
+
+   * UI 刷新建议 20–60 FPS。
+   * 采样块进入 ring buffer。
+   * 显示前做 decimation。
+6. 不要每收到一个点刷新一次图。
+7. 缩放和拖动不要导致程序卡死。
+
+### 5.4 Dock 面板拆分
+
+当前如果控制面板过长、过杂，需要拆分。新增目录：
+
+```text
+pc_app/scope_app/ui/panels/
+```
+
+新增文件：
+
+```text
+connection_panel.py
+acquisition_panel.py
+display_panel.py
+trigger_panel.py
+measurement_panel.py
+signal_generator_panel.py
+```
+
+每个面板职责：
+
+#### ConnectionPanel
+
+包含：
+
+1. Source 输入框或下拉框：
+
+   * `COM14`
+   * `tcp://127.0.0.1:8765`
+   * `fake://sine`
+   * `fake://square`
+   * `fake://noise`
+2. Baudrate：
+
+   * 115200 默认
+3. Connect / Disconnect
+4. Scan Ports
+5. Protocol 状态：
+
+   * BINARY
+   * ASCII
+6. Firmware / Device ID 显示区域。
+
+#### AcquisitionPanel
+
+包含：
+
+1. Run
+2. Stop
+3. Single
+4. Clear Buffer
+5. Sample Rate
+6. Record Length
+7. Channel Enable，当前只 CH1，但结构预留 CH2。
+8. 数据统计：
+
+   * 实际采样率
+   * 数据块序号
+   * 丢包数
+   * 接收速率
+
+#### DisplayPanel
+
+包含：
+
+1. Time/div
+2. Volt/div
+3. Horizontal Position
+4. Vertical Position
+5. Auto Scale
+6. Fit to Screen
+7. Grid 开关
+8. 颜色主题选择，先做 Dark 即可，Light 作为预留。
+
+#### TriggerPanel
+
+包含：
+
+1. Mode：
+
+   * Auto
+   * Normal
+   * Single
+2. Edge：
+
+   * Rising
+   * Falling
+3. Source：
+
+   * CH1
+4. Level：
+
+   * mV 或 V
+5. Pre-trigger：
+
+   * 0% / 25% / 50% / 75%
+6. Trigger 状态：
+
+   * WAIT
+   * TRIG
+   * FREE
+7. 触发线可在波形区显示。
+
+#### MeasurementPanel
+
+包含：
+
+1. Vmax
+2. Vmin
+3. Vpp
+4. Vavg
+5. Vrms DC
+6. Vrms AC
+7. Frequency
+8. Period
+9. Duty Cycle
+10. Sample Count
+11. Measurement Source：
+
+* Visible Window
+* Full Buffer
+* Last Triggered Record
+
+注意：
+
+* RMS 必须分 DC RMS 和 AC RMS。
+* AC RMS = 去掉平均值后的 RMS。
+* 频率不要只靠极其脆弱的两个点估算，至少要对噪声做阈值和边沿去抖。
+* 当前可以先复用已有算法，但要把 UI 命名改清楚。
+
+#### SignalGeneratorPanel
+
+包含：
+
+1. Waveform：
+
+   * SINE
+   * SQUARE
+   * TRI
+   * SAW
+2. Frequency
+3. Amplitude
+4. Offset
+5. Apply
+6. Start Output
+7. Stop Output
+
+注意：
+
+这个面板必须明确写成 `Signal Generator / 测试信号源`，不要和示波器采集混在一起。因为用户会误以为示波器采集参数就是波形发生参数。
+
+### 5.5 欢迎页和安全提示
+
+新增：
+
+```text
+pc_app/scope_app/ui/welcome_dialog.py
+```
+
+首次启动或 Help 菜单中显示：
+
+标题：
+
+```text
+SimpleScope PC - 接线与安全提示
+```
+
+内容：
+
+```text
+当前版本默认假设：
+- MCU：STM32F103C8T6
+- ADC 输入：PA0 / ADC1_IN0
+- 串口：USART1 PA9/PA10，经 CH340 连接电脑
+- 烧录调试：ST-Link SWD，PA13/PA14
+- ADC 安全输入范围：0V ~ 3.3V
+
+严禁：
+- 直接测市电
+- 输入负电压
+- 输入超过 3.3V 的电压
+- 未加分压/保护时测高压电路
+
+如果要测超过 3.3V 或交流双极性信号，需要模拟前端：
+- 分压
+- 偏置
+- 限流
+- 钳位保护
+- AC/DC 耦合
+```
+
+要求：
+
+1. 用户可以勾选“不再自动显示”。
+2. Help 菜单可以重新打开。
+3. 设置保存到本地配置。
+
+### 5.6 状态栏
+
+新增或重构：
+
+```text
+pc_app/scope_app/ui/status_bar.py
+```
+
+显示：
+
+```text
+Source: fake://sine | Protocol: BINARY | RUN | Fs: 1000 Hz | FPS: 30 | Blocks: 1234 | Dropped: 0
+```
+
+要求：
+
+1. 状态信息来自 controller/statistics，不要 UI 自己猜。
+2. 断线、协议错误、CRC 错误要有明显提示。
+3. STOP / RUN / WAIT / TRIG 状态颜色明显。
+
+### 5.7 设置持久化
+
+新增：
+
+```text
+pc_app/scope_app/core/app_settings.py
+```
+
+或者扩展已有 settings 模块。
+
+需要保存：
+
+1. 上次 source。
+2. 上次 baudrate。
+3. 上次 time/div。
+4. 上次 volt/div。
+5. 上次 trigger mode。
+6. 上次 trigger level。
+7. 上次窗口大小和位置。
+8. 是否显示安全提示。
+9. UI 主题。
+10. CSV 导出路径。
+
+要求：
+
+1. 使用 JSON 或 QSettings，任选一种。
+2. 需要可读可改。
+3. 不要保存到项目目录里的源码文件。
+4. Windows 下可以保存到用户目录，例如 `%APPDATA%/SimpleScopePC/settings.json`。
+5. 需要有默认值，配置损坏时自动恢复。
+
+### 5.8 Demo Mode 强化
+
+当前已有 `fake://sine`，需要扩展成真正可展示的 Demo Mode。
+
+要求：
+
+1. 顶部工具栏有 `Demo` 按钮。
+2. 点击后自动切换到 `fake://sine` 并连接。
+3. 增加：
+
+   * `fake://sine`
+   * `fake://square`
+   * `fake://triangle`
+   * `fake://noise`
+   * `fake://mixed`
+4. Demo 数据也走同一套 transport/protocol/acquisition/processing/UI 链路。
+5. 不允许 Demo 直接往 UI 画图，必须模拟真实数据源。
+6. README 中写清楚没有硬件也能运行上位机。
+
+## 6. 数据流架构要求
+
+本项目上位机必须保持如下数据流：
+
+```text
+Transport
+  SerialTransport / TcpTransport / FakeTransport
+        ↓
+Protocol Decoder
+  BinaryProtocol / AsciiProtocol / MixedStreamDecoder
+        ↓
+Acquisition Worker
+  后台线程读取数据，不阻塞 UI
+        ↓
+SampleBlock
+  seq / sample_rate / channel_count / point_count / adc_values
+        ↓
+WaveformRingBuffer
+  NumPy 块级写入
+        ↓
+Processing Pipeline
+  trigger / measurements / decimation
+        ↓
+UI
+  waveform_view / measurement_panel / status_bar
+```
+
+禁止出现下面情况：
+
+```text
+UI 直接 serial.readline()
+UI 直接 struct.unpack()
+UI 直接 while True 读数据
+UI 直接修改 transport 内部状态
+每个采样点触发一次 plot 更新
+```
+
+## 7. 处理链要求
+
+新增或整理：
+
+```text
+pc_app/scope_app/processing/pipeline.py
+```
+
+处理链包括：
+
+1. Decimation：
+
+   * 输入大量采样点。
+   * 根据当前屏幕宽度降采样。
+   * 保留峰值信息，不能简单每 N 点取一个导致尖峰丢失。
+   * 当前可以先做 min-max decimation。
+2. Measurements：
+
+   * 输入当前可见窗口或当前记录。
+   * 输出测量字典。
+3. Trigger：
+
+   * 当前可以继续用已有 Auto / Normal / Single。
+   * 但接口要清晰。
+4. Display Transform：
+
+   * ADC raw -> mV -> 屏幕坐标。
+   * 支持 volt/div、vertical position、time/div。
+
+## 8. 成品感要求
+
+本轮必须明显改善“像软件产品”的感觉。
+
+### 8.1 视觉
+
+要求：
+
+1. 中央波形区占主窗口最大面积。
+2. 控制区不能挤占大部分空间。
+3. 深色主题统一。
+4. 控件不要密密麻麻全堆在一起。
+5. 按钮文字统一：
+
+   * Connect / Disconnect
+   * Run
+   * Stop
+   * Single
+   * AutoSet
+   * Export
+   * Demo
+6. 中文界面可以保留，但英文术语要统一，不要一会儿“运行”，一会儿“Run”，一会儿“开始采样”。
+
+建议：
+
+* 主按钮可以用英文，因为示波器软件常用英文术语。
+* 面板标题可以中英混合：
+
+  * Connection 连接
+  * Acquisition 采集
+  * Display 显示
+  * Trigger 触发
+  * Measurements 测量
+  * Signal Generator 信号源
+
+### 8.2 状态
+
+必须让用户随时知道：
+
+1. 现在是否连接。
+2. 现在是否在采集。
+3. 现在是否触发。
+4. 当前数据来自真机、TCP 还是 fake。
+5. 当前协议是 binary 还是 ASCII。
+6. 当前是否有 CRC 错误。
+7. 当前是否丢块。
+8. 当前实际采样率是多少。
+
+### 8.3 空状态
+
+没有连接时，中央波形区不要空白得像坏了。显示：
+
+```text
+SimpleScope PC
+
+请选择数据源并连接：
+- fake://sine：无硬件演示
+- COMx：CH340 串口
+- tcp://127.0.0.1:8765：模拟器
+
+安全提示：ADC 输入仅限 0–3.3V
+```
+
+## 9. README 和文档更新
+
+更新：
+
+```text
+README.md
+docs/protocol.md
+docs/pc_app_architecture.md
+docs/user_guide_pc.md
+```
+
+### 9.1 README.md
+
+新增内容：
+
+1. 上位机截图占位：
+
+   * `docs/images/pc_app_v0_8_main.png`
+2. 一键运行 Demo：
+
+   * `tools\run_scope.bat --source fake://sine --connect`
+3. 真实硬件运行：
+
+   * `tools\run_scope.bat --source COM14 --baud 115200 --connect`
+4. 上位机架构图。
+5. 安全提示。
+6. 当前限制：
+
+   * 当前 STM32F103C8T6 ADC 输入 0–3.3V。
+   * 当前默认采样率仍有限。
+   * 当前是单通道 CH1。
+   * 高压/负压/交流输入需要模拟前端。
+
+### 9.2 docs/pc_app_architecture.md
+
+必须写清楚：
+
+1. 为什么使用 PySide6 + PyQtGraph。
+2. 数据流：
+
+   * transport
+   * protocol
+   * acquisition
+   * core model
+   * processing
+   * UI
+   * storage
+3. 每个目录职责。
+4. UI 不直接碰串口的原则。
+5. 未来扩展路线：
+
+   * CH2
+   * FFT
+   * Logic Analyzer
+   * Protocol Decoder
+   * USB CDC
+   * 更高采样率 MCU
+
+### 9.3 docs/user_guide_pc.md
+
+写给普通用户，不写太多代码。
+
+内容：
+
+1. 如何安装依赖。
+2. 如何启动 Demo。
+3. 如何连接真机。
+4. 如何选择串口。
+5. 如何看波形。
+6. 如何调 time/div 和 volt/div。
+7. 如何使用触发。
+8. 如何导出 CSV。
+9. 安全接线说明。
+
+## 10. 测试要求
+
+运行：
+
+```bat
+.venv\python.exe -m pytest -q
+```
+
+必须全部通过。
+
+新增或更新测试：
+
+```text
+tests/test_measurements.py
+tests/test_decimation.py
+tests/test_binary_protocol.py
+tests/test_fake_sources.py
+tests/test_settings.py
+```
+
+最低测试要求：
+
+1. `Vrms DC` 正确。
+2. `Vrms AC` 对带 1.65V 偏置的正弦波不能被 DC 分量污染。
+3. Vpp 正确。
+4. 方波 duty cycle 大致正确。
+5. BinaryProtocol 能解析完整 DATA 帧。
+6. CRC 错误能被识别。
+7. fake://sine 能产生稳定数据块。
+8. 设置文件缺失时能生成默认配置。
+9. 设置文件损坏时不会导致软件崩溃。
+10. min-max decimation 不丢明显尖峰。
+
+## 11. 代码质量要求
+
+1. 每个 PR/提交尽量只做一类事情。
+2. 所有新增模块要有类型注解。
+3. UI 层不要出现长计算。
+4. 后台线程退出要干净，关闭窗口不应卡住。
+5. 断开连接后可以重新连接。
+6. Demo Mode 和真实串口必须共用同一套上层链路。
+7. 所有异常要进入状态栏或日志，不要直接让程序崩。
+8. 不要引入过重依赖。
+9. 保持 Windows 可运行。
+10. 不要破坏 Keil 固件工程。
+
+## 12. 推荐执行顺序
+
+### Step 1：建立分支并确认当前状态
+
+执行：
+
+```bat
+git status
+git checkout -b ui-productization-v0.8
+.venv\python.exe -m pytest -q
+tools\run_scope.bat --source fake://sine --connect
+```
+
+确认当前能跑后再改。
+
+### Step 2：先重构 MainWindow 布局
+
+目标：
+
+1. 顶部工具栏。
+2. 中央 waveform view。
+3. 右侧 Dock。
+4. 底部 status bar。
+
+先不要大改底层。
+
+完成后提交：
+
+```bat
+git add pc_app/scope_app/ui
+git commit -m "ui: restructure main window into scope-style layout"
+```
+
+### Step 3：拆分控制面板
+
+目标：
+
+1. ConnectionPanel
+2. AcquisitionPanel
+3. DisplayPanel
+4. TriggerPanel
+5. MeasurementPanel
+6. SignalGeneratorPanel
+
+完成后提交：
+
+```bat
+git add pc_app/scope_app/ui
+git commit -m "ui: split control panel into oscilloscope dock panels"
+```
+
+### Step 4：增强波形区成品感
+
+目标：
+
+1. 10x8 网格。
+2. 深色主题。
+3. RUN/STOP/TRIG 状态角标。
+4. CH1 标签。
+5. time/div 和 volt/div 标注。
+6. 触发线。
+7. 空状态提示。
+
+完成后提交：
+
+```bat
+git add pc_app/scope_app/ui
+git commit -m "ui: polish waveform display as oscilloscope screen"
+```
+
+### Step 5：完善测量面板
+
+目标：
+
+1. Vmax
+2. Vmin
+3. Vpp
+4. Vavg
+5. Vrms DC
+6. Vrms AC
+7. Frequency
+8. Period
+9. Duty Cycle
+
+完成后提交：
+
+```bat
+git add pc_app/scope_app/processing pc_app/scope_app/ui tests
+git commit -m "processing: add complete basic oscilloscope measurements"
+```
+
+### Step 6：增强 Demo Mode
+
+目标：
+
+1. Demo 按钮。
+2. fake://sine
+3. fake://square
+4. fake://triangle
+5. fake://noise
+6. fake://mixed
+
+完成后提交：
+
+```bat
+git add pc_app/scope_app tools tests
+git commit -m "demo: add one-click oscilloscope demo sources"
+```
+
+### Step 7：加入安全提示和设置保存
+
+目标：
+
+1. Welcome/Safety dialog。
+2. Help 菜单可打开。
+3. 首次启动显示。
+4. 用户可勾选不再显示。
+5. 设置持久化。
+
+完成后提交：
+
+```bat
+git add pc_app/scope_app tests
+git commit -m "ui: add safety guide and persistent app settings"
+```
+
+### Step 8：更新文档
+
+目标：
+
+1. README 更新。
+2. docs/pc_app_architecture.md
+3. docs/user_guide_pc.md
+4. 截图占位或真实截图。
+5. 安全说明。
+
+完成后提交：
+
+```bat
+git add README.md docs
+git commit -m "docs: document PC app architecture and user guide"
+```
+
+### Step 9：最终验收
+
+执行：
+
+```bat
+.venv\python.exe -m pytest -q
+tools\run_scope.bat --source fake://sine --connect
+tools\run_scope.bat --source fake://square --connect
+```
+
+如果有真机：
+
+```bat
+tools\build_keil.bat
+tools\flash_stlink.bat
+tools\run_scope.bat --source COM14 --baud 115200 --connect
+```
+
+最后：
+
+```bat
+git status
+git log --oneline -5
+git push origin ui-productization-v0.8
+```
+
+## 13. 验收标准
+
+本轮完成后，应满足：
+
+1. 上位机启动后视觉上像示波器，而不是脚本工具。
+2. 没有硬件时，Demo Mode 一键能跑。
+3. 真机串口连接入口保留。
+4. TCP 模拟器入口保留。
+5. 二进制协议不被破坏。
+6. 主窗口不会因为采集阻塞。
+7. 关闭窗口时后台线程正常退出。
+8. 波形区有示波器网格、状态角标、通道标签、时基和垂直档位。
+9. 控制面板分区明确。
+10. 测量面板有完整基础测量值。
+11. 安全提示明确告诉用户不能直接测市电、高压、负压。
+12. README 能让新用户一键跑 Demo。
+13. 测试通过。
+14. 提交历史清晰。
+15. 不复制任何外部 GPL 项目代码。
+
+## 14. 重要设计原则
+
+本项目现在最重要的不是功能数量，而是架构边界。
+
+必须坚持：
+
+```text
+UI 是仪表盘，不是数据源。
+Transport 是数据来源，不是示波器逻辑。
+Protocol 是解码器，不是显示器。
+Acquisition 是采集状态机，不是按钮回调。
+Processing 是测量和触发，不是界面装饰。
+WaveformView 是显示控件，不是数据仓库。
+```
+
+最终目标是让 SimpleScope PC 后面能自然升级到：
+
+1. 双通道。
+2. 更高采样率。
+3. FFT 频谱。
+4. 数据记录。
+5. 逻辑分析。
+6. 协议解码。
+7. USB CDC。
+8. 更强 STM32。
+9. 模拟前端量程切换。
+10. 一键打包发布。
+
+本轮先把“像成品示波器上位机”这件事做扎实。

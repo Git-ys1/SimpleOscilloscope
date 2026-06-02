@@ -3,7 +3,7 @@ import pytest
 
 from pc_app.scope_app.protocol.binary_protocol import BinaryProtocol, crc16_ccitt
 from pc_app.scope_app.protocol.stream_decoder import ProtocolStreamDecoder
-from pc_app.scope_app.core.models import AckFrame, SampleBlock, TextFrame
+from pc_app.scope_app.core.models import AckFrame, ErrorFrame, SampleBlock, TextFrame
 
 
 def test_crc16_ccitt_known_vector():
@@ -37,3 +37,12 @@ def test_stream_decoder_accepts_mixed_ascii_and_binary_frames():
     assert isinstance(events[2], AckFrame)
     assert events[1].sequence == 10
     assert events[1].start_time_ms == pytest.approx(9.0)
+
+
+def test_stream_decoder_reports_crc_error():
+    protocol = BinaryProtocol()
+    decoder = ProtocolStreamDecoder()
+    frame = bytearray(protocol.build_data_frame(sequence=10, sample_rate_hz=1000, values_adc=np.array([1000], dtype=np.uint16)))
+    frame[-1] ^= 0xFF
+    events = decoder.feed(bytes(frame))
+    assert any(isinstance(event, ErrorFrame) and event.reason.startswith("binary:crc mismatch") for event in events)
