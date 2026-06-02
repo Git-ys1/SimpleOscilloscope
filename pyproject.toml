@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simplescope-pc"
+dynamic = ["version"]
+description = "SimpleScope PC oscilloscope upper-computer application"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Git-ys1" },
+]
+dependencies = [
+  "numpy>=2.0",
+  "PySide6>=6.11",
+  "pyqtgraph>=0.14",
+  "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9.0",
+  "pyinstaller>=6.0",
+]
+
+[project.gui-scripts]
+simplescope-pc = "scope_app.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "pc_app"}
+
+[tool.setuptools.packages.find]
+where = ["pc_app"]
+
+[tool.setuptools.dynamic]
+version = { attr = "scope_app.version.APP_VERSION" }

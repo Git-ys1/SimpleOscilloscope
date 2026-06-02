@@ -7,6 +7,9 @@ Listings/*
 *.uvgui.*
 *.uvgui
 build_keil.log
+build/
+dist/
+*.spec
 
 # Python
 __pycache__/
@@ -17,6 +20,9 @@ venv/
 .pytest_tmp/
 pytest_tmp/
 test_settings_tmp/
+.tmp/
+.tools/
+*.egg-info/
 
 # Editor and OS
 .idea/

@@ -4,8 +4,8 @@ from dataclasses import replace
 
 from PySide6 import QtCore, QtWidgets
 
-from .. import __version__
 from ..core.app_settings import AppSettingsStore
+from ..version import APP_NAME, APP_ORG, APP_VERSION
 from . import theme
 from .measurement_panel import MeasurementPanel as MeasurementBar
 from .panels.acquisition_panel import AcquisitionPanel
@@ -29,7 +29,7 @@ class MainWindow(QtWidgets.QMainWindow):
             settings = replace(settings, source=default_source)
         settings = replace(settings, baud=default_baud)
 
-        self.setWindowTitle(f"SimpleScope PC v{__version__}")
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setMinimumSize(1080, 680)
         self.resize(settings.window_width, settings.window_height)
 
@@ -99,6 +99,18 @@ class MainWindow(QtWidgets.QMainWindow):
         help_menu = self.menuBar().addMenu("Help")
         safety_action = help_menu.addAction("接线与安全说明")
         safety_action.triggered.connect(self.show_safety_dialog)
+        about_action = help_menu.addAction("About SimpleScope PC")
+        about_action.triggered.connect(self.show_about_dialog)
+
+    def show_about_dialog(self) -> None:
+        QtWidgets.QMessageBox.about(
+            self,
+            f"About {APP_NAME}",
+            f"<b>{APP_NAME}</b><br>"
+            f"Version: {APP_VERSION}<br>"
+            f"Organization: {APP_ORG}<br><br>"
+            "A compact STM32 oscilloscope upper-computer application.",
+        )
 
     def _build_toolbar(self) -> None:
         toolbar = self.addToolBar("Scope")

@@ -1,0 +1,51 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e .[dev]
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          python -m pytest -q
+
+      - name: Build portable app
+        shell: cmd
+        run: |
+          tools\build_portable.bat
+
+      - name: Create portable zip
+        shell: cmd
+        run: |
+          tools\package_portable_zip.bat
+
+      - name: Upload GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/SimpleScopePC-*-win64-portable.zip
+            README.md
+            docs/user_guide_pc.md

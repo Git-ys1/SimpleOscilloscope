@@ -1,6 +1,6 @@
 # SimpleOscilloscope
 
-简易示波器/信号源项目，目标硬件为 `STM32F103C8T6` 最小系统板。v0.8.0 起，上位机从工程调试工具升级为示波器软件雏形：顶部工具栏、中央示波器屏幕、右侧 Dock 控制面板、底部测量栏、安全提示、Demo Mode 和设置持久化都已接入。
+简易示波器/信号源项目，目标硬件为 `STM32F103C8T6` 最小系统板。v0.9.1 起，上位机进入 Windows 软件化发布线：支持 `simplescope-pc` GUI 命令、PyInstaller 便携版、portable zip、Inno Setup 安装包脚本和 GitHub Actions tag 构建。
 
 - Keil 固件工程：STM32 通过串口默认输出二进制采样块，并在 `PA8/TIM1_CH1` 输出同一波形的 PWM 占空比版本。
 - Python 上位机：`PySide6 + PyQtGraph + NumPy + pySerial` 模块化桌面应用，通过 CH340 串口、TCP 模拟器或 `fake://` 本地假数据源读取二进制/ASCII 采样帧并绘制波形。
@@ -8,12 +8,30 @@
 
 ![SimpleScope PC v0.8.0 主界面](docs/images/pc_app_v0_8_main.png)
 
+## 下载安装版
+
+普通用户推荐从 GitHub Releases 下载：
+
+- `SimpleScopePC-x.y.z-win64-portable.zip`：便携版，解压后双击 `SimpleScopePC.exe`。
+- `SimpleScopePC-x.y.z-Setup.exe`：安装版，安装后从开始菜单启动。
+
+便携版和安装版都不要求用户预先安装 Python。
+
 ## 快速开始
+
+开发者源码运行仍然可用。
 
 初始化上位机本地 Python 3.11 环境：
 
 ```bat
 tools\setup_pc_env.bat
+```
+
+安装本仓库为可编辑 Python 包，并生成 GUI 命令：
+
+```bat
+.venv\python.exe -m pip install -e .[dev]
+simplescope-pc --source fake://sine --connect
 ```
 
 没有硬件也能一键运行 Demo，上位机只推荐使用这一个入口：
@@ -55,6 +73,36 @@ Objects\SimpleOscilloscope.hex
 tools\flash_stlink.bat
 ```
 
+## 打包发布
+
+构建 Windows 便携版：
+
+```bat
+tools\build_portable.bat
+```
+
+生成 portable zip：
+
+```bat
+tools\package_portable_zip.bat
+```
+
+生成 Inno Setup 安装包：
+
+```bat
+tools\build_installer.bat
+```
+
+输出文件：
+
+```text
+dist\SimpleScopePC\SimpleScopePC.exe
+dist\SimpleScopePC-0.9.1-win64-portable.zip
+dist\installer\SimpleScopePC-0.9.1-Setup.exe
+```
+
+`tools\build_installer.bat` 需要本机已安装 Inno Setup 6，并能找到 `ISCC.exe`。
+
 ## 固件结构
 
 - `user/inc`：项目头文件。
@@ -70,6 +118,8 @@ tools\flash_stlink.bat
 - `pc_app/scope_app/acquisition`：采集控制器、后台读取线程、接收统计。
 - `pc_app/scope_app/processing`：测量、min-max 显示降采样、触发、处理链。
 - `pc_app/scope_app/ui`：PySide6 主窗口 shell、PyQtGraph 波形屏幕、Dock 面板、测量栏、状态栏、安全提示。
+- `packaging`：应用图标、Inno Setup 安装脚本。
+- `.github/workflows/release-windows.yml`：tag 触发的 Windows portable zip 构建和 Release 资产上传。
 
 数据流保持为：
 
@@ -79,7 +129,7 @@ Transport -> Protocol Decoder -> Acquisition -> WaveformRingBuffer -> Processing
 
 UI 不直接读串口、不直接解包二进制协议、不直接承担长计算。详见 `docs/pc_app_architecture.md`。
 
-上位机当前支持时基、垂直档位、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.8.0 起，主界面改为示波器式工作台，支持 `fake://sine`、`fake://square`、`fake://triangle`、`fake://noise`、`fake://mixed` 演示源，测量栏显示 Vpp、Vmax、Vmin、Avg、RMS DC、RMS AC、Freq 和 Duty。
+上位机当前支持时基、垂直档位、水平/垂直位置、暂停显示、清空缓冲、自动量程、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.8.0 起，主界面改为示波器式工作台，支持 `fake://sine`、`fake://square`、`fake://triangle`、`fake://noise`、`fake://mixed` 演示源，测量栏显示 Vpp、Vmax、Vmin、Avg、RMS DC、RMS AC、Freq 和 Duty。v0.9.1 起，普通用户可以下载 zip 或安装包运行，不需要安装 Python。
 
 运行测试：
 

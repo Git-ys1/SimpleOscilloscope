@@ -1,0 +1,635 @@
+# SimpleOscilloscope v1.0 软件化打包发布任务书
+## -1. 写在前面
+我看了 main。先判断成熟度：现在已经是“产品级雏形”，但还不是“成熟产品级软件”。
+
+原因很明确：你们上位机的架构已经像软件了，README 里已经写成 PySide6 + PyQtGraph + NumPy + pySerial 的模块化桌面应用，并且有 Transport -> Protocol Decoder -> Acquisition -> WaveformRingBuffer -> Processing -> UI 这种清晰数据流；文档也明确 UI 不直接读串口、不直接解包协议，这个方向是对的。
+但它现在仍然靠 tools\run_scope.bat --source fake://sine --connect 启动，README 也写了“后续上位机会逐步整理成更像普通软件包的安装和启动方式”，说明还没有进入真正的软件分发阶段。
+另外我抓到的 main 里 scope_app.__version__ 仍是 0.8.0，Releases 页面最新也显示 v0.8.0，没有看到 v0.9.0 Release；如果你刚推了 v0.9.0，记得同步改版本号、README 和 GitHub Release。
+
+你现在最该做的不是继续加功能，而是做 v1.0 打包发布线
+
+建议分三层：
+
+阶段	目标	用户体验
+v0.9.1	规范成 Python 包	开发者可以 pip install -e .，命令行输入 simplescope-pc 启动
+v0.9.2	打成 Windows 便携版	用户下载 zip，双击 SimpleScopePC.exe 启动
+v1.0.0	打成 Windows 安装包	用户下载 SimpleScopePC-Setup.exe，安装后桌面和开始菜单有图标
+
+你这个项目优先走 PyInstaller onedir 便携版 + Inno Setup 安装包。PyInstaller 官方定位就是把 Python 应用和依赖打包成用户无需安装 Python 就能运行的包；它支持 one-folder 和 one-file，其中 one-folder 是默认方式，更适合 PySide6 这种带 Qt 插件的桌面程序。
+安装包层用 Inno Setup。Inno Setup 是 Windows 应用安装包制作工具，可以通过命令行编译 .iss 脚本，适合生成带开始菜单、桌面快捷方式、卸载程序的 Setup.exe。
+
+我的推荐路线
+
+不要一开始用 onefile。
+PySide6 + PyQtGraph + NumPy 这种组合，--onefile 首次启动慢、调试麻烦，Qt 插件出问题也不好查。先用：
+
+dist/
+  SimpleScopePC/
+    SimpleScopePC.exe
+    PySide6/
+    numpy/
+    ...
+
+这就是便携版。确认能跑后，再用 Inno Setup 把这个文件夹封装成安装包。
+
+Qt 官方也有 pyside6-deploy，它是 PySide6 的部署工具，底层包装 Nuitka，能生成平台可执行文件；但对你现在这种快速发布、快速迭代、Windows 优先的项目，PyInstaller 更快落地，Nuitka / pyside6-deploy 可以留到后期优化体积和启动速度。
+
+成熟产品还缺什么
+
+你们现在缺的不是“界面控件”，而是这些软件产品要素：
+
+项目	当前状态	要补
+启动方式	.bat 启动	SimpleScopePC.exe 双击启动
+版本管理	__version__ 仍显示 0.8.0	统一 0.9.0 / 1.0.0
+Python 包结构	有 scope_app，但缺 pyproject	增加 pyproject.toml 和 GUI entry point
+发布物	GitHub Releases 有源码/旧资产	增加 win64 portable zip 和 Setup.exe
+安装体验	无安装程序	Inno Setup 安装包
+图标/产品名	暂未产品化	.ico、窗口图标、开始菜单图标
+CI 发布	还要手动打包	GitHub Actions 自动测试、打包、上传 Release
+用户文档	已有用户指南	加“下载安装版怎么用”
+崩溃/日志	还不确定	写入 %APPDATA%\SimpleScopePC\logs
+
+## 0. 总目标
+
+将当前 SimpleScope PC 从“运行脚本启动的 Python 上位机”升级为“可下载安装的软件”。
+
+最终用户体验：
+
+1. 用户不需要安装 Python。
+2. 用户下载 `SimpleScopePC-0.9.x-win64-portable.zip` 后，解压双击 `SimpleScopePC.exe` 即可启动。
+3. 用户下载 `SimpleScopePC-0.9.x-Setup.exe` 后，可以像普通 Windows 软件一样安装。
+4. 安装后开始菜单和桌面有 `SimpleScope PC` 快捷方式。
+5. GitHub Release 页面自动提供：
+
+   * `SimpleScopePC-版本号-win64-portable.zip`
+   * `SimpleScopePC-版本号-Setup.exe`
+   * `SimpleOscilloscope.hex`
+   * `README.md`
+   * `docs/user_guide_pc.md`
+
+本轮不要重构上位机业务功能，不要破坏现有串口、TCP、fake、二进制协议、触发、测量、Demo Mode。
+
+---
+
+## 1. 当前问题
+
+当前仓库已经有较完整的上位机架构，但仍然通过：
+
+```bat
+tools\run_scope.bat --source fake://sine --connect
+```
+
+启动。这适合开发，不适合给普通用户使用。
+
+当前还存在：
+
+1. 没有 `pyproject.toml`。
+2. 没有标准 GUI entry point。
+3. 没有 PyInstaller 打包脚本。
+4. 没有 Inno Setup 安装包脚本。
+5. 没有 GitHub Actions 自动打包发布。
+6. 没有统一版本号。
+7. `scope_app.__version__` 仍需要同步到当前版本。
+8. 没有应用图标 `.ico`。
+9. Release 资产还不是完整软件安装包。
+
+---
+
+## 2. 第一步：统一版本号
+
+修改：
+
+```text
+pc_app/scope_app/__init__.py
+```
+
+将：
+
+```python
+__version__ = "0.8.0"
+```
+
+改为当前版本，例如：
+
+```python
+__version__ = "0.9.1"
+```
+
+新增：
+
+```text
+pc_app/scope_app/version.py
+```
+
+内容：
+
+```python
+from __future__ import annotations
+
+APP_NAME = "SimpleScope PC"
+APP_VERSION = "0.9.1"
+APP_ORG = "SimpleOscilloscope"
+```
+
+要求：
+
+1. `main.py`、窗口标题、About 对话框、打包脚本统一读取这里。
+2. 不允许 README、`__init__.py`、打包脚本各写一套版本号。
+3. 后续发版前只改一个地方。
+
+---
+
+## 3. 第二步：增加 pyproject.toml
+
+在仓库根目录新增：
+
+```text
+pyproject.toml
+```
+
+建议内容：
+
+```toml
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simplescope-pc"
+version = "0.9.1"
+description = "SimpleScope PC oscilloscope upper-computer application"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Git-ys1" }
+]
+dependencies = [
+  "numpy>=2.0",
+  "PySide6>=6.11",
+  "pyqtgraph>=0.14",
+  "pyserial>=3.5"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=9.0",
+  "pyinstaller>=6.0"
+]
+
+[project.gui-scripts]
+simplescope-pc = "scope_app.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "pc_app"}
+
+[tool.setuptools.packages.find]
+where = ["pc_app"]
+```
+
+验收命令：
+
+```bat
+.venv\python.exe -m pip install -e .[dev]
+simplescope-pc --source fake://sine --connect
+```
+
+要求：
+
+1. `simplescope-pc` 命令能启动 GUI。
+2. 旧的 `tools\run_scope.bat` 继续可用。
+3. `python -m scope_app --source fake://sine --connect` 继续可用。
+4. 不能破坏测试。
+
+---
+
+## 4. 第三步：增加应用图标
+
+新增目录：
+
+```text
+packaging/assets/
+```
+
+新增文件：
+
+```text
+packaging/assets/SimpleScopePC.ico
+packaging/assets/SimpleScopePC.png
+```
+
+要求：
+
+1. `.ico` 用于 Windows exe 和安装包。
+2. `.png` 用于 README 和后续跨平台。
+3. 主窗口也设置图标。
+4. 没有最终图标前，先用临时示波器波形图标占位。
+
+---
+
+## 5. 第四步：增加 PyInstaller 便携版打包脚本
+
+新增：
+
+```text
+tools/build_portable.bat
+```
+
+内容参考：
+
+```bat
+@echo off
+setlocal
+
+set "ROOT=%~dp0.."
+set "PY=%ROOT%\.venv\python.exe"
+
+if not exist "%PY%" (
+  echo Missing local Python environment. Run tools\setup_pc_env.bat first.
+  exit /b 1
+)
+
+pushd "%ROOT%"
+
+"%PY%" -m pip install -U pyinstaller
+
+if exist build rmdir /s /q build
+if exist dist\SimpleScopePC rmdir /s /q dist\SimpleScopePC
+
+"%PY%" -m PyInstaller ^
+  --noconfirm ^
+  --clean ^
+  --windowed ^
+  --onedir ^
+  --name SimpleScopePC ^
+  --paths pc_app ^
+  --icon packaging\assets\SimpleScopePC.ico ^
+  --add-data "README.md;." ^
+  --add-data "docs;docs" ^
+  --collect-all PySide6 ^
+  --collect-all pyqtgraph ^
+  pc_app\simple_scope.py
+
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+
+echo Portable app created: dist\SimpleScopePC\SimpleScopePC.exe
+
+popd
+exit /b 0
+```
+
+验收：
+
+```bat
+tools\build_portable.bat
+dist\SimpleScopePC\SimpleScopePC.exe
+```
+
+要求：
+
+1. 双击 exe 能启动 GUI。
+2. Demo Mode 能跑。
+3. `fake://sine` 能连接。
+4. 真实串口 COM 能打开。
+5. 程序退出时后台线程正常结束。
+6. 不弹出黑色控制台窗口。
+7. Windows Defender 不应明显报毒；如果报毒，记录并后续考虑 Nuitka 或代码签名。
+
+---
+
+## 6. 第五步：生成便携版 zip
+
+新增：
+
+```text
+tools/package_portable_zip.bat
+```
+
+内容参考：
+
+```bat
+@echo off
+setlocal
+
+set "ROOT=%~dp0.."
+set "VERSION=0.9.1"
+set "DIST=%ROOT%\dist"
+set "APPDIR=%DIST%\SimpleScopePC"
+set "ZIP=%DIST%\SimpleScopePC-%VERSION%-win64-portable.zip"
+
+if not exist "%APPDIR%\SimpleScopePC.exe" (
+  echo Missing portable app. Run tools\build_portable.bat first.
+  exit /b 1
+)
+
+if exist "%ZIP%" del "%ZIP%"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Compress-Archive -Path '%APPDIR%\*' -DestinationPath '%ZIP%' -Force"
+
+echo Created %ZIP%
+exit /b 0
+```
+
+验收：
+
+```bat
+tools\build_portable.bat
+tools\package_portable_zip.bat
+```
+
+要求：
+
+1. zip 解压后双击 exe 可运行。
+2. 不依赖源码目录。
+3. 不依赖 `.venv`。
+4. 不依赖用户已经安装 Python。
+
+---
+
+## 7. 第六步：增加 Inno Setup 安装包
+
+新增目录：
+
+```text
+packaging/windows/
+```
+
+新增：
+
+```text
+packaging/windows/SimpleScopePC.iss
+```
+
+内容参考：
+
+```iss
+#define MyAppName "SimpleScope PC"
+#define MyAppPublisher "SimpleOscilloscope"
+#define MyAppExeName "SimpleScopePC.exe"
+#ifndef MyAppVersion
+#define MyAppVersion "0.9.1"
+#endif
+
+[Setup]
+AppId={{9C62C6A1-8F0B-4C17-9D5A-5F3A6E2E1001}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={autopf}\SimpleScope PC
+DefaultGroupName=SimpleScope PC
+OutputDir=..\..\dist\installer
+OutputBaseFilename=SimpleScopePC-{#MyAppVersion}-Setup
+Compression=lzma
+SolidCompression=yes
+WizardStyle=modern
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
+UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\assets\SimpleScopePC.ico
+
+[Languages]
+Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："; Flags: unchecked
+
+[Files]
+Source: "..\..\dist\SimpleScopePC\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\SimpleScope PC"; Filename: "{app}\{#MyAppExeName}"
+Name: "{commondesktop}\SimpleScope PC"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "启动 SimpleScope PC"; Flags: nowait postinstall skipifsilent
+```
+
+新增：
+
+```text
+tools/build_installer.bat
+```
+
+内容参考：
+
+```bat
+@echo off
+setlocal
+
+set "ROOT=%~dp0.."
+set "VERSION=0.9.1"
+
+if not exist "%ROOT%\dist\SimpleScopePC\SimpleScopePC.exe" (
+  call "%ROOT%\tools\build_portable.bat"
+  if errorlevel 1 exit /b 1
+)
+
+if not exist "%ROOT%\dist\installer" mkdir "%ROOT%\dist\installer"
+
+where ISCC.exe >nul 2>nul
+if errorlevel 1 (
+  echo ISCC.exe not found. Please install Inno Setup and add it to PATH.
+  echo You can also run it from: C:\Program Files (x86)\Inno Setup 6\ISCC.exe
+  exit /b 1
+)
+
+ISCC.exe /DMyAppVersion=%VERSION% "%ROOT%\packaging\windows\SimpleScopePC.iss"
+exit /b %ERRORLEVEL%
+```
+
+验收：
+
+```bat
+tools\build_installer.bat
+dist\installer\SimpleScopePC-0.9.1-Setup.exe
+```
+
+要求：
+
+1. 安装包能安装。
+2. 开始菜单有 SimpleScope PC。
+3. 桌面快捷方式可选。
+4. 卸载正常。
+5. 安装后不依赖源码目录。
+6. 安装后不依赖 `.venv`。
+7. 安装后 Demo Mode 能运行。
+
+---
+
+## 8. 第七步：GitHub Actions 自动打包 Release
+
+新增：
+
+```text
+.github/workflows/release-windows.yml
+```
+
+内容参考：
+
+```yaml
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e .[dev]
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          python -m pytest -q
+
+      - name: Build portable app
+        shell: cmd
+        run: |
+          tools\build_portable.bat
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          Compress-Archive -Path "dist\SimpleScopePC\*" -DestinationPath "dist\SimpleScopePC-$version-win64-portable.zip" -Force
+
+      - name: Upload GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/SimpleScopePC-*-win64-portable.zip
+```
+
+先只自动上传 portable zip。Inno Setup 安装包可以第二阶段再加入 CI，因为 CI 上安装 Inno Setup 可能需要额外处理。
+
+本地先保证：
+
+```bat
+tools\build_portable.bat
+tools\package_portable_zip.bat
+tools\build_installer.bat
+```
+
+都能跑。
+
+---
+
+## 9. 第八步：README 更新
+
+README 新增“下载安装”章节：
+
+````md
+## 下载安装版
+
+普通用户推荐从 GitHub Releases 下载：
+
+- `SimpleScopePC-x.y.z-win64-portable.zip`：便携版，解压后双击 `SimpleScopePC.exe`
+- `SimpleScopePC-x.y.z-Setup.exe`：安装版，安装后从开始菜单启动
+
+开发者仍可使用：
+
+```bat
+tools\setup_pc_env.bat
+tools\run_scope.bat --source fake://sine --connect
+````
+
+````
+
+还要新增：
+
+1. 打包命令。
+2. 发布命令。
+3. 安装包截图。
+4. 桌面图标截图。
+5. 软件版本截图。
+
+---
+
+## 10. 第九步：发布流程
+
+本地验收：
+
+```bat
+git status
+.venv\python.exe -m pytest -q
+tools\build_portable.bat
+tools\package_portable_zip.bat
+tools\build_installer.bat
+````
+
+手动测试：
+
+```bat
+dist\SimpleScopePC\SimpleScopePC.exe
+```
+
+确认 Demo 和串口入口能用后：
+
+```bat
+git add .
+git commit -m "packaging: add Windows portable and installer build pipeline"
+git tag v0.9.1
+git push origin main
+git push origin v0.9.1
+```
+
+GitHub Actions 应该自动生成 Release 资产。
+
+---
+
+## 11. 验收标准
+
+完成后必须满足：
+
+1. `tools\run_scope.bat` 仍可用。
+2. `simplescope-pc` 命令可用。
+3. `dist\SimpleScopePC\SimpleScopePC.exe` 可双击运行。
+4. portable zip 解压后可运行。
+5. Setup.exe 可安装、启动、卸载。
+6. 没有安装 Python 的电脑也能运行。
+7. Demo Mode 可运行。
+8. 真实 COM 串口入口保留。
+9. TCP 模拟器入口保留。
+10. GitHub Release 提供下载资产。
+11. README 明确区分“普通用户下载安装”和“开发者源码运行”。
+12. 版本号统一。
+13. 测试通过。
+14. 没有破坏固件工程。
+15. 没有把 Keil、STM32CubeProgrammer、`.venv` 打进普通用户安装包。
+
+---
+
+## 12. 后续 v1.0 前再补
+
+1. About 对话框。
+2. 日志目录：`%APPDATA%\SimpleScopePC\logs`。
+3. 崩溃异常捕获。
+4. 软件图标美化。
+5. 安装包签名，避免 Windows SmartScreen 提示太重。
+6. Release Notes 自动生成。
+7. 可选：Nuitka / pyside6-deploy 优化体积和启动速度。
+8. 可选：winget 发布。
+9. 可选：自动更新。

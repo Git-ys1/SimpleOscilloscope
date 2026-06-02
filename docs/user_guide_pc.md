@@ -1,11 +1,21 @@
 # SimpleScope PC 用户指南
 
-## 安装依赖
+## 下载和安装
+
+V0.9.1 起，普通用户优先使用发布页里的 Windows 包，不需要安装 Python：
+
+- `SimpleScopePC-0.9.1-win64-portable.zip`：便携版，解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.1-Setup.exe`：安装版，按向导安装后从开始菜单启动。
+
+源码仓库仍保留开发者入口，适合调试、二次开发和本地验证。
+
+## 开发者安装依赖
 
 从仓库根目录执行：
 
 ```bat
 tools\setup_pc_env.bat
+.venv\python.exe -m pip install -e .[dev]
 ```
 
 ## 启动 Demo
@@ -14,6 +24,12 @@ tools\setup_pc_env.bat
 
 ```bat
 tools\run_scope.bat --source fake://sine --connect
+```
+
+也可以使用安装后的命令行入口：
+
+```bat
+simplescope-pc --source fake://sine --connect
 ```
 
 软件打开后也可以点击顶部工具栏的 `Demo`，它会自动切换到 `fake://sine` 并连接。当前支持：
@@ -34,6 +50,12 @@ tools\run_scope.bat --source fake://sine --connect
 tools\run_scope.bat --source COM14 --baud 115200 --connect
 ```
 
+或：
+
+```bat
+simplescope-pc --source COM14 --baud 115200 --connect
+```
+
 如果串口号不是 `COM14`，在右侧 `Connection 连接` 面板里点击 `Scan Ports` 后选择对应 COM 口。
 
 ## 连接 TCP 模拟器
@@ -49,6 +71,26 @@ python simulator\mcu_simulator.py
 ```bat
 tools\run_scope.bat --source tcp://127.0.0.1:8765 --connect
 ```
+
+便携版或安装版也可以在窗口右侧 `Connection 连接` 面板里把 Source 改为 `tcp://127.0.0.1:8765` 后连接。
+
+## 打包命令
+
+维护者在仓库根目录执行：
+
+```bat
+tools\build_portable.bat
+tools\package_portable_zip.bat
+tools\build_installer.bat
+```
+
+产物默认输出到：
+
+- `dist\SimpleScopePC\SimpleScopePC.exe`
+- `dist\SimpleScopePC-0.9.1-win64-portable.zip`
+- `dist\installer\SimpleScopePC-0.9.1-Setup.exe`
+
+安装包构建需要本机已安装 Inno Setup。
 
 ## 看波形
 

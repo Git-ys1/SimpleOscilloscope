@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any
+
+from ..app_paths import app_data_dir
 
 
 @dataclass
@@ -45,6 +46,4 @@ class AppSettingsStore:
 
 
 def default_settings_path() -> Path:
-    appdata = os.environ.get("APPDATA")
-    base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
-    return base / "SimpleScopePC" / "settings.json"
+    return app_data_dir() / "settings.json"

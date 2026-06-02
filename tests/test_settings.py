@@ -1,7 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 
-from pc_app.scope_app.core.app_settings import AppSettings, AppSettingsStore
+from pc_app.scope_app.core.app_settings import AppSettings, AppSettingsStore, default_settings_path
 
 
 def test_settings_missing_file_returns_defaults():
@@ -27,6 +27,13 @@ def test_settings_round_trip():
     settings = store.load()
     assert settings.source == "COM14"
     assert settings.show_safety_on_start is False
+
+
+def test_default_settings_path_uses_appdata_org_directory(monkeypatch):
+    appdata = Path.cwd() / "test_settings_tmp" / "appdata" / uuid4().hex
+    monkeypatch.setenv("APPDATA", str(appdata))
+
+    assert default_settings_path() == appdata / "SimpleScopePC" / "settings.json"
 
 
 def _settings_path(name: str) -> Path:

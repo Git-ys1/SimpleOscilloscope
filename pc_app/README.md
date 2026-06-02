@@ -1,6 +1,6 @@
 # SimpleScope PC
 
-`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。当前推荐入口只有仓库根目录下的 `tools\run_scope.bat`，后续会继续向普通软件包式安装和启动收束。
+`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。v0.9.1 起，普通用户优先使用 Windows 便携版或安装包，开发者仍可从仓库根目录通过 `tools\run_scope.bat` 或 `simplescope-pc` 启动。
 
 ## 分层目标
 
@@ -41,13 +41,27 @@ v0.5.0 起，上位机数据层支持采样块；v0.6.0 起，常用操作界面
 - `WaveformRingBuffer.append_block()`：支持把采样块写入现有显示缓冲。
 - `SET FORMAT ASCII` / `SET FORMAT BINARY`：保留现场切换和调试入口。
 
-## 启动
+## 普通用户启动
+
+从发布页下载：
+
+- `SimpleScopePC-0.9.1-win64-portable.zip`：解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.1-Setup.exe`：安装后从开始菜单启动。
+
+## 开发者启动
 
 从仓库根目录执行：
 
 ```bat
 tools\setup_pc_env.bat
+.venv\python.exe -m pip install -e .[dev]
 tools\run_scope.bat --source fake://sine --connect
+```
+
+安装 editable 包后也可以执行：
+
+```bat
+simplescope-pc --source fake://sine --connect
 ```
 
 连接真实 CH340 串口：
@@ -62,3 +76,19 @@ tools\run_scope.bat --source COM14 --baud 115200 --connect
 python simulator\mcu_simulator.py
 tools\run_scope.bat --source tcp://127.0.0.1:8765 --connect
 ```
+
+## 打包
+
+```bat
+tools\build_portable.bat
+tools\package_portable_zip.bat
+tools\build_installer.bat
+```
+
+产物：
+
+- `dist\SimpleScopePC\SimpleScopePC.exe`
+- `dist\SimpleScopePC-0.9.1-win64-portable.zip`
+- `dist\installer\SimpleScopePC-0.9.1-Setup.exe`
+
+安装包构建需要本机已安装 Inno Setup。

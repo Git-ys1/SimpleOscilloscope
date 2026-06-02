@@ -38,6 +38,10 @@ Storage
 - `processing`：触发、测量、降采样和显示处理链。
 - `ui`：主窗口 shell、示波器屏幕、Dock 面板、状态栏、安全提示。
 - `storage`：CSV 等导出能力。
+- `version.py`：应用名、版本号和组织名的唯一来源。
+- `app_paths.py`：运行时资源、日志目录和用户设置目录解析。
+- `packaging`：图标、Inno Setup 脚本和发布资产。
+- `tools`：开发启动、PyInstaller 便携版、zip 和安装包构建脚本。
 
 ## UI 边界
 
@@ -49,13 +53,15 @@ UI 是仪表盘，不是数据源：
 - Demo Mode 也走 `FakeTransport -> ProtocolStreamDecoder -> AcquisitionController`。
 - MainWindow 只负责菜单、工具栏、中央屏幕、Dock、状态栏和信号连接。
 
-## v0.8.0 UI 结构
+## v0.9.1 UI 和发布结构
 
 - 顶部工具栏：`Connect`、`Run`、`Stop`、`Single`、`AutoSet`、`Demo`、`Export`。
 - 中央示波器屏幕：深色背景、10 x 8 主网格、CH1 标签、触发线、RUN/STOP/WAIT/TRIG 状态角标、空状态提示。
 - 右侧 Dock：Connection、Acquisition、Display、Trigger、Measurements、Signal Generator。
 - 底部测量栏：Vpp、Vmax、Vmin、Avg、RMS DC、RMS AC、Freq、Duty、Count。
 - 状态栏：Source、Protocol、状态、Fs、FPS、Blocks、Dropped、消息。
+- 应用标题、About 对话框、打包脚本和发布文件名统一读取 `APP_VERSION`。
+- 普通用户入口是 `dist\SimpleScopePC\SimpleScopePC.exe`、便携 zip 或 Inno 安装包；开发者入口仍支持 `tools\run_scope.bat` 和 `simplescope-pc`。
 
 ## 设置持久化
 
@@ -67,6 +73,28 @@ UI 是仪表盘，不是数据源：
 
 配置缺失或损坏时自动恢复默认值。
 
+日志默认写入：
+
+```text
+%APPDATA%\SimpleScopePC\logs\simplescope-pc.log
+```
+
+## 打包发布链路
+
+```text
+root pyproject.toml
+  ↓ editable install / gui-script
+simplescope-pc
+  ↓ PyInstaller onedir
+dist\SimpleScopePC\SimpleScopePC.exe
+  ↓ Compress-Archive
+dist\SimpleScopePC-0.9.1-win64-portable.zip
+  ↓ Inno Setup
+dist\installer\SimpleScopePC-0.9.1-Setup.exe
+```
+
+GitHub Actions 在 `v*` tag 上构建 Windows portable zip 并上传 Release 资产；安装包仍可由本机 Inno Setup 构建。
+
 ## 扩展路线
 
 - CH2 和多通道 `Trace`。
@@ -76,4 +104,4 @@ UI 是仪表盘，不是数据源：
 - USB CDC。
 - 更高采样率 MCU。
 - 模拟前端量程切换。
-- 一键打包发布。
+- 签名、崩溃上报和更完整的安装包 CI。
