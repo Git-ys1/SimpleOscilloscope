@@ -4,6 +4,7 @@ from PySide6 import QtCore, QtWidgets
 
 from ..core.models import MeasurementSnapshot
 from ..core.units import format_frequency, format_voltage
+from . import theme
 
 
 class MeasurementPanel(QtWidgets.QWidget):
@@ -28,7 +29,7 @@ class MeasurementPanel(QtWidgets.QWidget):
             item_layout = QtWidgets.QVBoxLayout(item)
             item_layout.setContentsMargins(0, 0, 0, 0)
             name = QtWidgets.QLabel(label)
-            name.setStyleSheet("color: #8ea1c4; font-size: 8pt;")
+            name.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 8pt;")
             value = QtWidgets.QLabel("--")
             value.setStyleSheet("font-weight: 600;")
             value.setTextInteractionFlags(value.textInteractionFlags() | QtCore.Qt.TextSelectableByMouse)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from PySide6 import QtWidgets
 
 from ..core.models import AcquisitionStats
+from . import theme
 
 
 class ScopeStatusBar(QtWidgets.QStatusBar):
@@ -30,14 +31,14 @@ class ScopeStatusBar(QtWidgets.QStatusBar):
         state = text.upper()
         self.run_state.setText(state)
         color = {
-            "RUN": "#50e3a4",
-            "RUNNING": "#50e3a4",
-            "STOP": "#ff6b6b",
-            "STOPPED": "#ff6b6b",
-            "WAIT": "#ffcc66",
-            "TRIG": "#ffcc66",
-            "ERROR": "#ff5c8a",
-        }.get(state, "#d9e2f2")
+            "RUN": theme.RUN,
+            "RUNNING": theme.RUN,
+            "STOP": theme.STOP,
+            "STOPPED": theme.STOP,
+            "WAIT": theme.WAIT,
+            "TRIG": theme.TRIGGER,
+            "ERROR": theme.ERROR,
+        }.get(state, theme.TEXT)
         self.run_state.setStyleSheet(f"font-weight: 700; color: {color};")
 
     def set_stats(self, stats: AcquisitionStats) -> None:
