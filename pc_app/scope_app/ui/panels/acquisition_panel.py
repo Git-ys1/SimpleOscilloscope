@@ -25,12 +25,12 @@ class AcquisitionPanel(QtWidgets.QWidget):
             (t("custom"), 0),
         ]:
             self.sample_rate_preset.addItem(label, value)
-        self.sample_rate_preset.setCurrentIndex(3)
+        self.sample_rate_preset.setCurrentIndex(4)
         self.sample_rate_preset.currentIndexChanged.connect(self._apply_rate_preset)
 
         self.sample_rate = QtWidgets.QSpinBox()
         self.sample_rate.setRange(self.capabilities.rate_min, self.capabilities.rate_max)
-        self.sample_rate.setValue(10_000)
+        self.sample_rate.setValue(20_000)
         self.record_length = QtWidgets.QSpinBox()
         self.record_length.setRange(128, 200_000)
         self.record_length.setSingleStep(128)

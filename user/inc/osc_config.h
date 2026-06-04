@@ -2,10 +2,10 @@
 #define OSC_CONFIG_H
 
 #define OSC_FW_NAME            "SimpleOscilloscope"
-#define OSC_FW_VERSION         "0.9.2"
+#define OSC_FW_VERSION         "0.9.3"
 
 #define OSC_UART_BAUD          921600U
-#define OSC_DEFAULT_RATE_HZ    10000U
+#define OSC_DEFAULT_RATE_HZ    20000U
 #define OSC_MIN_RATE_HZ        1U
 #define OSC_MAX_RATE_HZ        20000U
 

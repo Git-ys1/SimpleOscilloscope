@@ -1,6 +1,6 @@
 # SimpleScope PC
 
-`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。v0.9.1 起，普通用户优先使用 Windows 便携版或安装包，开发者仍可从仓库根目录通过 `tools\run_scope.bat` 或 `simplescope-pc` 启动。v0.9.2 起，界面切换到中文页签控制面板，并支持触发居中显示、1 kHz 测试信号、10/20 kSa/s 采样预设和采样质量提示。
+`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。v0.9.1 起，普通用户优先使用 Windows 便携版或安装包，开发者仍可从仓库根目录通过 `tools\run_scope.bat` 或 `simplescope-pc` 启动。v0.9.3 起，界面切换到锁定画布的中文示波器面板，读数固定悬浮，并支持触发居中显示、1 kHz 测试信号、20 kSa/s 默认采样和采样质量提示。
 
 ## 分层目标
 
@@ -45,8 +45,8 @@ v0.5.0 起，上位机数据层支持采样块；v0.6.0 起，常用操作界面
 
 从发布页下载：
 
-- `SimpleScopePC-0.9.2-win64-portable.zip`：解压后运行 `SimpleScopePC.exe`。
-- `SimpleScopePC-0.9.2-Setup.exe`：安装后从开始菜单启动。
+- `SimpleScopePC-0.9.3-win64-portable.zip`：解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.3-Setup.exe`：安装后从开始菜单启动。
 
 ## 开发者启动
 
@@ -88,7 +88,7 @@ tools\build_installer.bat
 产物：
 
 - `dist\SimpleScopePC\SimpleScopePC.exe`
-- `dist\SimpleScopePC-0.9.2-win64-portable.zip`
-- `dist\installer\SimpleScopePC-0.9.2-Setup.exe`
+- `dist\SimpleScopePC-0.9.3-win64-portable.zip`
+- `dist\installer\SimpleScopePC-0.9.3-Setup.exe`
 
 安装包构建需要本机已安装 Inno Setup。

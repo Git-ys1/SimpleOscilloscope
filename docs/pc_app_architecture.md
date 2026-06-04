@@ -53,6 +53,13 @@ UI 是仪表盘，不是数据源：
 - Demo Mode 也走 `FakeTransport -> ProtocolStreamDecoder -> AcquisitionController`。
 - MainWindow 只负责菜单、工具栏、中央屏幕、Dock、状态栏和信号连接。
 
+## v0.9.3 示波器屏幕修正
+
+- `WaveformView` 禁止鼠标拖拽和滚轮缩放，避免交付演示时误把波形屏幕拉偏。
+- CH1 读数、运行/触发状态、底部时基/采样率读数改为固定 QWidget overlay，不再随 PyQtGraph 数据坐标移动。
+- 触发处理优先选择已经收齐后触发数据的触发点，避免最新触发刚发生时屏幕右半边没有数据。
+- SINE 显示路径会做平滑插值，固件默认采样率提升到 20 kSa/s，正弦查表增加相位内插。
+
 ## v0.9.2 示波器体验结构
 
 - 顶部工具栏：`连接`、`运行`、`停止`、`单次`、`自动设置`、`演示`、`导出`。
@@ -99,9 +106,9 @@ simplescope-pc
   ↓ PyInstaller onedir
 dist\SimpleScopePC\SimpleScopePC.exe
   ↓ Compress-Archive
-dist\SimpleScopePC-0.9.2-win64-portable.zip
+dist\SimpleScopePC-0.9.3-win64-portable.zip
   ↓ Inno Setup
-dist\installer\SimpleScopePC-0.9.2-Setup.exe
+dist\installer\SimpleScopePC-0.9.3-Setup.exe
 ```
 
 GitHub Actions 在 `v*` tag 上构建 Windows portable zip 并上传 Release 资产；安装包仍可由本机 Inno Setup 构建。

@@ -6,7 +6,7 @@ import numpy as np
 
 from ..core.models import DisplayConfig, MeasurementSnapshot, TriggerConfig
 from .measurements import calculate_measurements
-from .trigger import TriggerMode, locate_trigger, triggered_reference_time_ms, trigger_marker_x_s
+from .trigger import TriggerMode, locate_display_trigger, triggered_reference_time_ms, trigger_marker_x_s
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ def process_scope_frame(
         marker_x = trigger_marker_x_s(reference, trigger_time)
         trigger_state = "TRIG"
     else:
-        trigger_index = locate_trigger(time_ms, value_mv, trigger)
+        trigger_index = locate_display_trigger(time_ms, value_mv, display, trigger)
         if trigger_index is not None:
             trigger_time = float(time_ms[trigger_index])
             reference = triggered_reference_time_ms(trigger_time, display, trigger)

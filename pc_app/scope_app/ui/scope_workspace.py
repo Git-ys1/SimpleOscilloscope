@@ -68,7 +68,8 @@ class ScopeWorkspace(QtCore.QObject):
         self.current_source = settings.source
         self.current_protocol = "BINARY"
         self.current_run_state = "STOP"
-        self.sample_rate_hz = 10_000
+        self.sample_rate_hz = 20_000
+        self.current_wave = "SINE"
         self.current_signal_frequency_hz = 1000
         self.capabilities = DeviceCapabilities()
         self.last_stats = AcquisitionStats()
@@ -130,6 +131,8 @@ class ScopeWorkspace(QtCore.QObject):
         self.message_changed.emit(f"协议请求: {output_format}")
 
     def apply_signal(self, wave: str, frequency_hz: int, amplitude_mv: int, offset_mv: int) -> None:
+        self.current_wave = wave.upper()
+        self.waveform.set_trace_wave(self.current_wave)
         self.current_signal_frequency_hz = frequency_hz
         self.controller.apply_signal(
             SignalConfig(
@@ -277,6 +280,8 @@ class ScopeWorkspace(QtCore.QObject):
 
     def _handle_frame(self, frame: object) -> None:
         if isinstance(frame, DeviceStatus):
+            self.current_wave = frame.wave.upper()
+            self.waveform.set_trace_wave(self.current_wave)
             self.sample_rate_hz = frame.sample_rate_hz
             self.current_signal_frequency_hz = frame.frequency_hz
             self.sample_rate_changed.emit(frame.sample_rate_hz)
@@ -318,10 +323,10 @@ class ScopeWorkspace(QtCore.QObject):
         if self.current_signal_frequency_hz <= 0 or self.sample_rate_hz <= 0:
             self.quality_changed.emit("")
             return
-        recommended = self.current_signal_frequency_hz * 10
+        recommended = self.current_signal_frequency_hz * 20
         if self.sample_rate_hz < recommended:
             self.quality_changed.emit(
-                f"采样率偏低：当前信号 {self.current_signal_frequency_hz:g} Hz，采样率 {self.sample_rate_hz:g} Sa/s，至少建议 {recommended:g} Sa/s"
+                f"采样率偏低：当前信号 {self.current_signal_frequency_hz:g} Hz，采样率 {self.sample_rate_hz:g} Sa/s，示波显示建议 {recommended:g} Sa/s"
             )
         else:
             self.quality_changed.emit("")

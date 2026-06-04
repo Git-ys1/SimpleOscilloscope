@@ -26,7 +26,7 @@ class SignalConfig:
     frequency_hz: int = 1000
     amplitude_mv: int = 1200
     offset_mv: int = 1650
-    sample_rate_hz: int = 10_000
+    sample_rate_hz: int = 20_000
 
 
 class DisplayMode:
@@ -55,7 +55,7 @@ class TriggerConfig:
 
 @dataclass(frozen=True)
 class RecordConfig:
-    sample_rate_hz: int = 10_000
+    sample_rate_hz: int = 20_000
     record_length: int = 1024
     trigger_position: float = 0.2
 

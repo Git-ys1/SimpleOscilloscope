@@ -10,7 +10,7 @@ from pc_app.scope_app.version import APP_ID, APP_NAME, APP_VERSION
 def test_version_module_is_package_version_source():
     assert APP_NAME == "SimpleScope PC"
     assert APP_ID == "SimpleScopePC"
-    assert APP_VERSION == "0.9.2"
+    assert APP_VERSION == "0.9.3"
     assert __version__ == APP_VERSION
 
 

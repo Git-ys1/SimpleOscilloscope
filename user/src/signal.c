@@ -68,7 +68,14 @@ static int16_t waveform_value(signal_wave_t wave, uint16_t phase)
         return (int16_t)value;
     case SIGNAL_WAVE_SINE:
     default:
-        return k_sine_table[(phase >> 10) & 0x3FU];
+    {
+        uint16_t index = (uint16_t)((phase >> 10) & 0x3FU);
+        uint16_t next_index = (uint16_t)((index + 1U) & 0x3FU);
+        int32_t current = k_sine_table[index];
+        int32_t next = k_sine_table[next_index];
+        int32_t fraction = (int32_t)(phase & 0x03FFU);
+        return (int16_t)(current + (((next - current) * fraction) / 1024L));
+    }
     }
 }
 

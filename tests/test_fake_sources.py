@@ -20,7 +20,7 @@ def test_fake_sources_produce_binary_sample_blocks():
         assert block.sample_rate_hz > 0
 
 
-def test_fake_source_advertises_v092_capabilities():
+def test_fake_source_advertises_v093_capabilities():
     transport = FakeTransport("fake://sine")
     decoder = ProtocolStreamDecoder()
     transport.write(b"CAP?\n")
@@ -52,3 +52,9 @@ def test_fake_source_accepts_1khz_and_20ksa():
     assert block is not None
     assert block.sample_rate_hz == 20_000
     assert block.point_count == 64
+
+
+def test_fake_source_defaults_to_20ksa_for_smooth_1khz_demo():
+    block = _first_block("fake://sine")
+
+    assert block.sample_rate_hz == 20_000

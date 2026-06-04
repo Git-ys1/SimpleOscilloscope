@@ -25,7 +25,7 @@ class SignalState:
     freq_hz: int = 1000
     amp_mv: int = 1200
     offset_mv: int = 1650
-    rate_hz: int = 10_000
+    rate_hz: int = 20_000
     streaming: bool = True
     sequence: int = 0
     start_time: float = time.monotonic()
@@ -35,7 +35,7 @@ class SignalState:
 class SimulatorHandler(socketserver.StreamRequestHandler):
     state = SignalState()
     lock = threading.Lock()
-    version = "0.9.2"
+    version = "0.9.3"
     rate_min = 1
     rate_max = 20_000
     freq_min = 1

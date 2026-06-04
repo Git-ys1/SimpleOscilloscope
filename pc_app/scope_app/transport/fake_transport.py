@@ -12,7 +12,7 @@ from ..protocol.binary_protocol import BinaryProtocol
 
 class FakeTransport:
     name = "fake"
-    VERSION = "0.9.2"
+    VERSION = "0.9.3"
     RATE_MIN = 1
     RATE_MAX = 20_000
     FREQ_MIN = 1
@@ -28,7 +28,7 @@ class FakeTransport:
         self.frequency_hz = 1000
         self.amplitude_mv = 1200
         self.offset_mv = 1650
-        self.sample_rate_hz = 10_000
+        self.sample_rate_hz = 20_000
         self.streaming = True
         self.sequence = 0
         self.output_format = "BINARY"

@@ -7,8 +7,8 @@
 固件启动：
 
 ```text
-BOOT,SimpleOscilloscope,0.9.2,STM32F103C8T6,921600
-STATUS,SINE,1000,1200,1650,10000,RUN
+BOOT,SimpleOscilloscope,0.9.3,STM32F103C8T6,921600
+STATUS,SINE,1000,1200,1650,20000,RUN
 FORMAT,BINARY
 CAP,RATE_MIN=1,RATE_MAX=20000,FREQ_MIN=1,FREQ_MAX=5000,BAUD=921600,BLOCK=64
 ```
@@ -43,16 +43,16 @@ SET WAVE SAW
 SET FREQ 1000
 SET AMP 1200
 SET OFFSET 1650
-SET RATE 10000
+SET RATE 20000
 SET FORMAT BINARY
 SET FORMAT ASCII
 ```
 
-固件 v0.9.2+ 的采样率命令会被限制在 `1..20000 Hz`，测试信号频率会被限制在 `1..5000 Hz`。上位机连接后会发送 `CAP?` 并使用返回的能力范围更新采样率和信号源频率控件。
+固件 v0.9.3+ 的采样率命令会被限制在 `1..20000 Hz`，测试信号频率会被限制在 `1..5000 Hz`。上位机连接后会发送 `CAP?` 并使用返回的能力范围更新采样率和信号源频率控件。
 
 ## 高速二进制数据帧
 
-v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。v0.9.2 起默认每块 64 点。命令、`BOOT`、`STATUS`、`CAP`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
+v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。v0.9.2 起默认每块 64 点，v0.9.3 起默认采样率为 20 kSa/s。命令、`BOOT`、`STATUS`、`CAP`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
 
 帧结构，小端序：
 

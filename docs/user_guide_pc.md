@@ -2,10 +2,10 @@
 
 ## 下载和安装
 
-V0.9.1 起，普通用户优先使用发布页里的 Windows 包，不需要安装 Python。V0.9.2 起，示波器界面改为中文页签控制面板，默认支持 1 kHz 测试信号和 10/20 kSa/s 采样预设：
+V0.9.1 起，普通用户优先使用发布页里的 Windows 包，不需要安装 Python。V0.9.3 起，示波器界面改为锁定画布的中文页签控制面板，默认支持 1 kHz 测试信号和 20 kSa/s 采样：
 
-- `SimpleScopePC-0.9.2-win64-portable.zip`：便携版，解压后运行 `SimpleScopePC.exe`。
-- `SimpleScopePC-0.9.2-Setup.exe`：安装版，按向导安装后从开始菜单启动。
+- `SimpleScopePC-0.9.3-win64-portable.zip`：便携版，解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.3-Setup.exe`：安装版，按向导安装后从开始菜单启动。
 
 源码仓库仍保留开发者入口，适合调试、二次开发和本地验证。
 
@@ -87,8 +87,8 @@ tools\build_installer.bat
 产物默认输出到：
 
 - `dist\SimpleScopePC\SimpleScopePC.exe`
-- `dist\SimpleScopePC-0.9.2-win64-portable.zip`
-- `dist\installer\SimpleScopePC-0.9.2-Setup.exe`
+- `dist\SimpleScopePC-0.9.3-win64-portable.zip`
+- `dist\installer\SimpleScopePC-0.9.3-Setup.exe`
 
 安装包构建需要本机已安装 Inno Setup。
 
@@ -99,6 +99,7 @@ tools\build_installer.bat
 - 左上角显示 CH1、Volt/div、耦合和探头倍率。
 - 右上角显示 `运行` / `停止` / `等待触发` / `已触发`。
 - 底部显示时基、采样率和记录长度。
+- 画布默认锁定，鼠标拖拽或滚轮不会拉动画面；读数是固定悬浮层，不随波形坐标移动。
 - 没有连接时会显示数据源选择和安全提示。
 
 ## 调整显示
