@@ -2,7 +2,7 @@
 #define MyAppPublisher "SimpleOscilloscope"
 #define MyAppExeName "SimpleScopePC.exe"
 #ifndef MyAppVersion
-#define MyAppVersion "0.9.1"
+#define MyAppVersion "0.9.2"
 #endif
 
 [Setup]

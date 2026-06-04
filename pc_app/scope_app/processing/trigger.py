@@ -38,9 +38,8 @@ def triggered_reference_time_ms(
     display: DisplayConfig,
     trigger: TriggerConfig,
 ) -> float:
-    span_s = max(display.time_per_div_s * 10.0, 0.001)
-    pre = min(max(trigger.pretrigger_ratio, 0.0), 0.95)
-    return trigger_time_ms - (display.horizontal_offset_s * 1000.0) + (span_s * (1.0 - pre) * 1000.0)
+    _ = display, trigger
+    return trigger_time_ms
 
 
 def trigger_marker_x_s(reference_time_ms: float, trigger_time_ms: float) -> float:

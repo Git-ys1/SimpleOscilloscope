@@ -5,19 +5,69 @@
 #include "uart.h"
 #include <stdint.h>
 
+#define SAMPLE_QUEUE_CAPACITY (OSC_BINARY_BLOCK_POINTS * 4U)
+
+static volatile uint16_t g_sample_head;
+static volatile uint16_t g_sample_tail;
+static volatile uint16_t g_sample_count;
+static signal_sample_t g_sample_queue[SAMPLE_QUEUE_CAPACITY];
+
 static uint8_t time_due(uint32_t now, uint32_t deadline)
 {
     return ((int32_t)(now - deadline) >= 0) ? 1U : 0U;
 }
 
+static void sample_queue_clear(void)
+{
+    __disable_irq();
+    g_sample_head = 0U;
+    g_sample_tail = 0U;
+    g_sample_count = 0U;
+    __enable_irq();
+}
+
+static uint8_t sample_queue_pop(signal_sample_t *sample)
+{
+    uint8_t ok = 0U;
+
+    __disable_irq();
+    if (g_sample_count > 0U) {
+        *sample = g_sample_queue[g_sample_tail];
+        g_sample_tail = (uint16_t)((g_sample_tail + 1U) % SAMPLE_QUEUE_CAPACITY);
+        g_sample_count--;
+        ok = 1U;
+    }
+    __enable_irq();
+    return ok;
+}
+
+void board_sample_timer_tick(void)
+{
+    signal_sample_t sample;
+
+    if (!protocol_streaming_enabled()) {
+        return;
+    }
+
+    sample = signal_next_sample(board_millis());
+    board_pwm_set_mv(sample.value_mv);
+    if (g_sample_count >= SAMPLE_QUEUE_CAPACITY) {
+        return;
+    }
+
+    g_sample_queue[g_sample_head] = sample;
+    g_sample_head = (uint16_t)((g_sample_head + 1U) % SAMPLE_QUEUE_CAPACITY);
+    g_sample_count++;
+}
+
 int main(void)
 {
-    uint32_t next_sample_ms;
     uint32_t last_led_ms;
     uint32_t now;
     signal_sample_t sample;
     uint16_t binary_values[OSC_BINARY_BLOCK_POINTS];
     uint16_t binary_count;
+    uint16_t drained;
     uint32_t binary_sequence;
     uint32_t binary_first_ms;
 
@@ -26,9 +76,9 @@ int main(void)
     signal_init();
     protocol_init();
     protocol_send_boot();
+    sample_queue_clear();
 
     now = board_millis();
-    next_sample_ms = now;
     last_led_ms = now;
     binary_count = 0U;
     binary_sequence = 0U;
@@ -38,9 +88,14 @@ int main(void)
         protocol_poll();
         now = board_millis();
 
-        if (protocol_streaming_enabled() && time_due(now, next_sample_ms)) {
-            sample = signal_next_sample(now);
-            board_pwm_set_mv(sample.value_mv);
+        if (!protocol_streaming_enabled()) {
+            sample_queue_clear();
+            binary_count = 0U;
+        }
+
+        drained = 0U;
+        while (drained < SAMPLE_QUEUE_CAPACITY && sample_queue_pop(&sample)) {
+            drained++;
             if (protocol_binary_enabled()) {
                 if (binary_count == 0U) {
                     binary_sequence = sample.sequence;
@@ -54,10 +109,6 @@ int main(void)
             } else {
                 binary_count = 0U;
                 protocol_send_sample(&sample);
-            }
-            next_sample_ms += signal_get_interval_ms();
-            if (time_due(now, next_sample_ms + signal_get_interval_ms())) {
-                next_sample_ms = now + signal_get_interval_ms();
             }
         }
 

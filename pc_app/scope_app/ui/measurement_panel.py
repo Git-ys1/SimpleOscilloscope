@@ -15,15 +15,15 @@ class MeasurementPanel(QtWidgets.QWidget):
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(16)
         for key, label in [
-            ("vpp", "Vpp"),
-            ("vmax", "Vmax"),
-            ("vmin", "Vmin"),
-            ("avg", "Avg"),
+            ("vpp", "峰峰值 Vpp"),
+            ("vmax", "最大值"),
+            ("vmin", "最小值"),
+            ("avg", "平均值"),
             ("rms_dc", "RMS DC"),
             ("rms_ac", "RMS AC"),
-            ("freq", "Freq"),
-            ("duty", "Duty"),
-            ("points", "Count"),
+            ("freq", "频率"),
+            ("duty", "占空比"),
+            ("points", "点数"),
         ]:
             item = QtWidgets.QWidget()
             item_layout = QtWidgets.QVBoxLayout(item)

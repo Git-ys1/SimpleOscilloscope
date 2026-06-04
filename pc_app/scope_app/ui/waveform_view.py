@@ -3,9 +3,11 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore
+from PySide6 import QtGui
 
-from ..core.models import DisplayConfig
+from ..core.models import DisplayConfig, DisplayMode, TriggerConfig
 from ..processing.decimation import decimate_for_display
+from ..processing.record_view import RecordView, x_range_for_display
 from . import theme
 
 
@@ -14,19 +16,22 @@ class WaveformView(pg.PlotWidget):
         super().__init__()
         self.setBackground(theme.BACKGROUND)
         self.showGrid(x=True, y=True, alpha=0.34)
-        self.setLabel("left", "电压", units="mV")
-        self.setLabel("bottom", "时间", units="s")
-        self.getPlotItem().setMenuEnabled(False)
-        self.getPlotItem().hideButtons()
+        plot_item = self.getPlotItem()
+        plot_item.setMenuEnabled(False)
+        plot_item.hideButtons()
+        plot_item.hideAxis("left")
+        plot_item.hideAxis("bottom")
         self._curve = self.plot([], [], pen=pg.mkPen(theme.CH1, width=2))
         self._zero_line = pg.InfiniteLine(pos=0, angle=0, pen=pg.mkPen(theme.GRID_MAJOR, width=1))
         self.addItem(self._zero_line)
         self._trigger_line = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(theme.TRIGGER, width=1.5, style=QtCore.Qt.DashLine))
         self._trigger_line.hide()
         self.addItem(self._trigger_line)
+        self._trigger_marker = self._text_item("▼", theme.TRIGGER, anchor=(0.5, 0))
+        self._trigger_marker.hide()
         self._channel_label = self._text_item("CH1  500 mV/div  DC  1x", theme.CH1, anchor=(0, 0))
-        self._state_label = self._text_item("STOP", theme.STOP, anchor=(1, 0))
-        self._timebase_label = self._text_item("100 ms/div  Fs: --  Record: --", theme.TEXT_MUTED, anchor=(0, 1))
+        self._state_label = self._text_item("停止", theme.STOP, anchor=(1, 0))
+        self._timebase_label = self._text_item("时基 100 ms/div  采样率 --  深度 --", theme.TEXT_MUTED, anchor=(0, 1))
         self._empty_label = self._text_item(
             "SimpleScope PC\n\n请选择数据源并连接：\n- fake://sine：无硬件演示\n- COMx：CH340 串口\n- tcp://127.0.0.1:8765：模拟器\n\n安全提示：ADC 输入仅限 0-3.3V",
             theme.TEXT_MUTED,
@@ -34,6 +39,7 @@ class WaveformView(pg.PlotWidget):
         )
         self.setYRange(0, 3300, padding=0.02)
         self._config = DisplayConfig()
+        self._trigger_config = TriggerConfig()
         self._sample_rate_hz = 0.0
         self._record_length = 0
         self._run_state = "STOP"
@@ -42,6 +48,10 @@ class WaveformView(pg.PlotWidget):
     def set_display_config(self, config: DisplayConfig) -> None:
         self._config = config
         self._update_labels()
+        self._apply_ranges()
+
+    def set_trigger_config(self, config: TriggerConfig) -> None:
+        self._trigger_config = config
         self._apply_ranges()
 
     def set_status(self, run_state: str, trigger_state: str | None = None) -> None:
@@ -58,7 +68,17 @@ class WaveformView(pg.PlotWidget):
             "TRIG": theme.TRIGGER,
             "ERROR": theme.ERROR,
         }.get(label, theme.TEXT)
-        self._state_label.setText(label)
+        self._state_label.setText(
+            {
+                "RUN": "运行",
+                "RUNNING": "运行",
+                "STOP": "停止",
+                "STOPPED": "停止",
+                "WAIT": "等待触发",
+                "TRIG": "已触发",
+                "ERROR": "错误",
+            }.get(label, label)
+        )
         self._state_label.setColor(color)
 
     def set_sample_context(self, sample_rate_hz: float, record_length: int) -> None:
@@ -68,14 +88,15 @@ class WaveformView(pg.PlotWidget):
 
     def update_waveform(
         self,
-        time_ms: np.ndarray,
-        value_mv: np.ndarray,
+        time_ms,
+        value_mv,
         reference_time_ms: float | None = None,
         trigger_x_s: float | None = None,
     ) -> None:
         if time_ms.size == 0:
             self._curve.setData([], [])
             self._trigger_line.hide()
+            self._trigger_marker.hide()
             self._empty_label.show()
             self._position_labels()
             return
@@ -84,12 +105,24 @@ class WaveformView(pg.PlotWidget):
         x = (time_ms - reference) / 1000.0
         x, y = decimate_for_display(x, value_mv)
         self._curve.setData(x, y)
-        if trigger_x_s is None:
-            self._trigger_line.hide()
-        else:
-            self._trigger_line.setPos(trigger_x_s)
-            self._trigger_line.show()
+        self._set_trigger_marker(trigger_x_s)
         self._apply_ranges()
+        self._position_labels()
+
+    def update_record(self, record: RecordView) -> None:
+        if record.x_s.size == 0:
+            self._curve.setData([], [])
+            self._trigger_line.hide()
+            self._trigger_marker.hide()
+            self._empty_label.show()
+            self._position_labels()
+            return
+        self._empty_label.hide()
+        x, y = decimate_for_display(record.x_s, record.y_mv)
+        self._curve.setData(x, y)
+        self._set_trigger_marker(record.trigger_x_s)
+        self.setXRange(record.x_left_s, record.x_right_s, padding=0.0)
+        self._apply_y_range()
         self._position_labels()
 
     def auto_scale_voltage(self, value_mv: np.ndarray) -> DisplayConfig:
@@ -111,12 +144,16 @@ class WaveformView(pg.PlotWidget):
         return config
 
     def _apply_ranges(self) -> None:
-        time_span = max(self._config.time_per_div_s * 10.0, 0.001)
-        right = self._config.horizontal_offset_s
-        self.setXRange(right - time_span, right, padding=0.0)
+        left, right = x_range_for_display(self._config, self._trigger_config)
+        self.setXRange(left, right, padding=0.0)
         bottom_axis = self.getPlotItem().getAxis("bottom")
         left_axis = self.getPlotItem().getAxis("left")
         bottom_axis.setTickSpacing(major=self._config.time_per_div_s, minor=self._config.time_per_div_s / 5.0)
+        self._apply_y_range()
+        self._position_labels()
+
+    def _apply_y_range(self) -> None:
+        left_axis = self.getPlotItem().getAxis("left")
         if self._config.auto_range:
             self.enableAutoRange(axis="y", enable=True)
         else:
@@ -124,7 +161,6 @@ class WaveformView(pg.PlotWidget):
             half_span = max(self._config.volt_per_div_mv * 4.0, 10.0)
             self.setYRange(self._config.vertical_center_mv - half_span, self._config.vertical_center_mv + half_span, padding=0.0)
             left_axis.setTickSpacing(major=self._config.volt_per_div_mv, minor=self._config.volt_per_div_mv / 5.0)
-        self._position_labels()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
         super().resizeEvent(event)
@@ -132,14 +168,25 @@ class WaveformView(pg.PlotWidget):
 
     def _text_item(self, text: str, color: str, anchor: tuple[float, float]) -> pg.TextItem:
         item = pg.TextItem(text=text, color=color, anchor=anchor)
+        item.setFont(QtGui.QFont(theme.PRIMARY_FONT, 10))
         self.addItem(item)
         return item
 
     def _update_labels(self) -> None:
         self._channel_label.setText(f"CH1  {self._config.volt_per_div_mv:g} mV/div  DC  1x")
-        sample = f"Fs: {self._sample_rate_hz:.0f} Hz" if self._sample_rate_hz > 0 else "Fs: --"
-        record = f"Record: {self._record_length}" if self._record_length > 0 else "Record: --"
-        self._timebase_label.setText(f"{self._config.time_per_div_s:g} s/div  {sample}  {record}")
+        sample = f"{self._sample_rate_hz:.0f} Sa/s" if self._sample_rate_hz > 0 else "--"
+        record = f"{self._record_length} 点" if self._record_length > 0 else "--"
+        mode = "滚动" if self._config.display_mode == DisplayMode.ROLL else "触发"
+        self._timebase_label.setText(f"时基 {_format_time_div(self._config.time_per_div_s)}/div  采样率 {sample}  深度 {record}  {mode}")
+
+    def _set_trigger_marker(self, trigger_x_s: float | None) -> None:
+        if trigger_x_s is None:
+            self._trigger_line.hide()
+            self._trigger_marker.hide()
+            return
+        self._trigger_line.setPos(trigger_x_s)
+        self._trigger_line.show()
+        self._trigger_marker.show()
 
     def _position_labels(self) -> None:
         if not hasattr(self, "_channel_label"):
@@ -155,3 +202,12 @@ class WaveformView(pg.PlotWidget):
         self._state_label.setPos(x_max - x_margin, y_max - y_margin)
         self._timebase_label.setPos(x_min + x_margin, y_min + y_margin)
         self._empty_label.setPos((x_min + x_max) / 2.0, (y_min + y_max) / 2.0)
+        self._trigger_marker.setPos(0.0, y_max - y_margin * 0.5)
+
+
+def _format_time_div(seconds: float) -> str:
+    if seconds < 1e-3:
+        return f"{seconds * 1e6:g} us"
+    if seconds < 1.0:
+        return f"{seconds * 1e3:g} ms"
+    return f"{seconds:g} s"

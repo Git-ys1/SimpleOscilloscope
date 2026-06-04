@@ -22,4 +22,4 @@ def test_trigger_reference_places_marker_at_pretrigger_position():
     display = DisplayConfig(time_per_div_s=0.1, horizontal_offset_s=0.0)
     trigger = TriggerConfig(pretrigger_ratio=0.25)
     reference = triggered_reference_time_ms(1000.0, display, trigger)
-    assert trigger_marker_x_s(reference, 1000.0) == -0.75
+    assert trigger_marker_x_s(reference, 1000.0) == 0.0

@@ -1,4 +1,5 @@
 #include "protocol.h"
+#include "board.h"
 #include "osc_config.h"
 #include "uart.h"
 #include <stdlib.h>
@@ -14,8 +15,8 @@
 
 static char g_rx_line[RX_LINE_MAX];
 static uint8_t g_rx_len;
-static uint8_t g_streaming;
-static uint8_t g_binary_enabled;
+static volatile uint8_t g_streaming;
+static volatile uint8_t g_binary_enabled;
 
 static uint8_t starts_with(const char *text, const char *prefix)
 {
@@ -77,6 +78,23 @@ static void send_format(void)
 {
     uart_write("FORMAT,");
     uart_write(g_binary_enabled ? "BINARY" : "ASCII");
+    uart_write("\r\n");
+}
+
+static void send_capabilities(void)
+{
+    uart_write("CAP,RATE_MIN=");
+    write_u32(OSC_MIN_RATE_HZ);
+    uart_write(",RATE_MAX=");
+    write_u32(OSC_MAX_RATE_HZ);
+    uart_write(",FREQ_MIN=");
+    write_u32(OSC_MIN_FREQ_HZ);
+    uart_write(",FREQ_MAX=");
+    write_u32(OSC_MAX_FREQ_HZ);
+    uart_write(",BAUD=");
+    write_u32(OSC_UART_BAUD);
+    uart_write(",BLOCK=");
+    write_u32(OSC_BINARY_BLOCK_POINTS);
     uart_write("\r\n");
 }
 
@@ -146,6 +164,7 @@ static void handle_set(const char *line)
     } else if (starts_with(line, "SET RATE ")) {
         value = (uint16_t)atoi(line + 9);
         signal_set_sample_rate(value);
+        board_sample_timer_set_rate(signal_get_sample_rate());
         send_ok("RATE");
     } else if (strcmp(line, "SET FORMAT ASCII") == 0) {
         g_binary_enabled = 0U;
@@ -174,8 +193,10 @@ static void handle_line(char *line)
         uart_write(",STM32F103C8T6,");
         uart_write(OSC_FW_VERSION);
         uart_write(",USART1_PA9_PA10,PA8_PWM+BINARY_DATA\r\n");
+    } else if (strcmp(line, "CAP?") == 0) {
+        send_capabilities();
     } else if (strcmp(line, "HELP") == 0) {
-        uart_write("HELP,PING|ID?|STATUS|START|STOP|SET WAVE SINE|SQUARE|TRI|SAW|SET FREQ n|SET AMP n|SET OFFSET n|SET RATE n|SET FORMAT ASCII|BINARY\r\n");
+        uart_write("HELP,PING|ID?|CAP?|STATUS|START|STOP|SET WAVE SINE|SQUARE|TRI|SAW|SET FREQ n|SET AMP n|SET OFFSET n|SET RATE n|SET FORMAT ASCII|BINARY\r\n");
     } else if (strcmp(line, "STATUS") == 0) {
         send_status();
         send_format();
@@ -235,9 +256,12 @@ void protocol_send_boot(void)
     uart_write(OSC_FW_NAME);
     uart_write(",");
     uart_write(OSC_FW_VERSION);
-    uart_write(",STM32F103C8T6,115200\r\n");
+    uart_write(",STM32F103C8T6,");
+    write_u32(OSC_UART_BAUD);
+    uart_write("\r\n");
     send_status();
     send_format();
+    send_capabilities();
 }
 
 void protocol_send_sample(const signal_sample_t *sample)

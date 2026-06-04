@@ -46,7 +46,7 @@ class WaveformRingBuffer:
             self.append(
                 SampleFrame(
                     sequence=block.sequence + offset,
-                    time_ms=int(block.start_time_ms + offset * dt_ms),
+                    time_ms=float(block.start_time_ms + offset * dt_ms),
                     value_mv=float(value),
                     wave="BLOCK",
                     frequency_hz=0,

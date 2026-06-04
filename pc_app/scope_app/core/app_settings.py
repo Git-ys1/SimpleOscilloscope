@@ -11,8 +11,8 @@ from ..app_paths import app_data_dir
 @dataclass
 class AppSettings:
     source: str = "fake://sine"
-    baud: int = 115200
-    time_per_div_s: float = 0.1
+    baud: int = 921600
+    time_per_div_s: float = 0.0002
     volt_per_div_mv: float = 500.0
     trigger_mode: str = "Auto"
     trigger_level_mv: float = 1650.0

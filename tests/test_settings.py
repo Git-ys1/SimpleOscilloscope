@@ -17,7 +17,7 @@ def test_settings_corrupt_file_does_not_crash():
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("{bad json", encoding="utf-8")
     settings = AppSettingsStore(path).load()
-    assert settings.baud == 115200
+    assert settings.baud == 921600
 
 
 def test_settings_round_trip():

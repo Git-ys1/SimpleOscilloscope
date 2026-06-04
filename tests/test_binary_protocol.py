@@ -39,6 +39,20 @@ def test_stream_decoder_accepts_mixed_ascii_and_binary_frames():
     assert events[1].start_time_ms == pytest.approx(9.0)
 
 
+def test_ring_buffer_keeps_sub_millisecond_binary_timing():
+    from pc_app.scope_app.core.ring_buffer import WaveformRingBuffer
+
+    protocol = BinaryProtocol()
+    frame = protocol.build_data_frame(sequence=1, sample_rate_hz=20_000, values_adc=np.array([0, 1, 2], dtype=np.uint16))
+    decoder = ProtocolStreamDecoder()
+    block = next(event for event in decoder.feed(frame) if isinstance(event, SampleBlock))
+    buffer = WaveformRingBuffer(capacity=8)
+    buffer.append_block(block)
+    time_ms, _value_mv, _sequence = buffer.arrays()
+
+    assert time_ms.tolist() == pytest.approx([0.0, 0.05, 0.1])
+
+
 def test_stream_decoder_reports_crc_error():
     protocol = BinaryProtocol()
     decoder = ProtocolStreamDecoder()

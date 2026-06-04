@@ -53,6 +53,17 @@ UI 是仪表盘，不是数据源：
 - Demo Mode 也走 `FakeTransport -> ProtocolStreamDecoder -> AcquisitionController`。
 - MainWindow 只负责菜单、工具栏、中央屏幕、Dock、状态栏和信号连接。
 
+## v0.9.2 示波器体验结构
+
+- 顶部工具栏：`连接`、`运行`、`停止`、`单次`、`自动设置`、`演示`、`导出`。
+- 中央示波器屏幕：隐藏普通图表坐标轴，使用触发居中记录视图、CH1 角落读数、中文运行状态、触发线和触发位置标记。
+- 右侧 Dock：改为 `连接 / 采集 / 显示 / 触发 / 测量 / 信号源` 页签，避免所有控件堆在一个长滚动面板中。
+- 采集页签：采样率使用 `1/2/5/10/20 kSa/s + 自定义`，连接后根据 `CAP?` 返回的设备能力更新范围。
+- 信号源页签：频率使用 `10/50/100/500 Hz, 1/2/5 kHz + 自定义`，默认 1 kHz。
+- `processing.autoset`：根据波形估算 Vpp、中心电压、频率，选择常用 Time/div 和 Volt/div，同时设置触发电平与 50% 预触发。
+- `processing.record_view`：根据 ring buffer、触发结果和显示配置生成屏幕 x/y 数据；`WaveformView` 只负责绘制。
+- 状态区会在采样率低于信号频率 10 倍时显示黄色质量提示。
+
 ## v0.9.1 UI 和发布结构
 
 - 顶部工具栏：`Connect`、`Run`、`Stop`、`Single`、`AutoSet`、`Demo`、`Export`。
@@ -88,9 +99,9 @@ simplescope-pc
   ↓ PyInstaller onedir
 dist\SimpleScopePC\SimpleScopePC.exe
   ↓ Compress-Archive
-dist\SimpleScopePC-0.9.1-win64-portable.zip
+dist\SimpleScopePC-0.9.2-win64-portable.zip
   ↓ Inno Setup
-dist\installer\SimpleScopePC-0.9.1-Setup.exe
+dist\installer\SimpleScopePC-0.9.2-Setup.exe
 ```
 
 GitHub Actions 在 `v*` tag 上构建 Windows portable zip 并上传 Release 资产；安装包仍可由本机 Inno Setup 构建。

@@ -11,22 +11,22 @@ class MeasurementPanel(QtWidgets.QWidget):
         super().__init__()
         self.labels: dict[str, QtWidgets.QLabel] = {}
         self.source = QtWidgets.QComboBox()
-        self.source.addItems(["Visible Window", "Full Buffer", "Last Triggered Record"])
+        self.source.addItems(["当前屏幕", "完整缓存", "最近触发记录"])
 
         layout = QtWidgets.QFormLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
-        layout.addRow("Source", self.source)
+        layout.addRow("来源", self.source)
         for key, label in [
-            ("vmax", "Vmax"),
-            ("vmin", "Vmin"),
-            ("vpp", "Vpp"),
-            ("avg", "Vavg"),
+            ("vmax", "最大值"),
+            ("vmin", "最小值"),
+            ("vpp", "峰峰值 Vpp"),
+            ("avg", "平均值"),
             ("rms_dc", "Vrms DC"),
             ("rms_ac", "Vrms AC"),
-            ("freq", "Frequency"),
-            ("period", "Period"),
-            ("duty", "Duty Cycle"),
-            ("points", "Sample Count"),
+            ("freq", "频率"),
+            ("period", "周期"),
+            ("duty", "占空比"),
+            ("points", "采样点数"),
         ]:
             value = QtWidgets.QLabel("--")
             value.setTextInteractionFlags(value.textInteractionFlags() | QtCore.Qt.TextSelectableByMouse)

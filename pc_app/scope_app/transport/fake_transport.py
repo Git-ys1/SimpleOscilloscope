@@ -12,18 +12,23 @@ from ..protocol.binary_protocol import BinaryProtocol
 
 class FakeTransport:
     name = "fake"
-    VERSION = "0.7.0"
-    BINARY_BLOCK_POINTS = 16
+    VERSION = "0.9.2"
+    RATE_MIN = 1
+    RATE_MAX = 20_000
+    FREQ_MIN = 1
+    FREQ_MAX = 5_000
+    BAUD = 921600
+    BINARY_BLOCK_POINTS = 64
 
     def __init__(self, source: str = "fake://sine") -> None:
         wave = source.split("://", 1)[1].upper() if "://" in source else "SINE"
         self.wave = "TRI" if wave == "TRIANGLE" else wave
         if self.wave not in {"SINE", "SQUARE", "TRI", "SAW", "NOISE", "MIXED"}:
             self.wave = "SINE"
-        self.frequency_hz = 5
+        self.frequency_hz = 1000
         self.amplitude_mv = 1200
         self.offset_mv = 1650
-        self.sample_rate_hz = 200
+        self.sample_rate_hz = 10_000
         self.streaming = True
         self.sequence = 0
         self.output_format = "BINARY"
@@ -31,7 +36,7 @@ class FakeTransport:
         self.started = time.monotonic()
         self._closed = False
         self._outbox: "queue.Queue[bytes]" = queue.Queue()
-        self._enqueue(f"BOOT,SimpleOscilloscope,{self.VERSION},FAKE,115200\n".encode("ascii"))
+        self._enqueue(f"BOOT,SimpleOscilloscope,{self.VERSION},FAKE,{self.BAUD}\n".encode("ascii"))
         self._enqueue_status()
 
     def _enqueue(self, data: bytes) -> None:
@@ -80,6 +85,14 @@ class FakeTransport:
             self._enqueue(f"PONG,SimpleOscilloscope,{self.VERSION}\n".encode("ascii"))
         elif command == "ID?":
             self._enqueue(f"ID,SimpleOscilloscope,FAKE,{self.VERSION},FAKE,BINARY_DATA\n".encode("ascii"))
+        elif command == "CAP?":
+            self._enqueue(
+                (
+                    f"CAP,RATE_MIN={self.RATE_MIN},RATE_MAX={self.RATE_MAX},"
+                    f"FREQ_MIN={self.FREQ_MIN},FREQ_MAX={self.FREQ_MAX},"
+                    f"BAUD={self.BAUD},BLOCK={self.BINARY_BLOCK_POINTS}\n"
+                ).encode("ascii")
+            )
         elif command == "STATUS":
             self._enqueue_status()
         elif command == "START":
@@ -101,13 +114,13 @@ class FakeTransport:
                     raise ValueError
                 self.wave = candidate
             elif key == "FREQ":
-                self.frequency_hz = max(1, min(500, int(value)))
+                self.frequency_hz = max(self.FREQ_MIN, min(self.FREQ_MAX, int(value)))
             elif key == "AMP":
                 self.amplitude_mv = max(0, min(3300, int(value)))
             elif key == "OFFSET":
                 self.offset_mv = max(0, min(3300, int(value)))
             elif key == "RATE":
-                self.sample_rate_hz = max(1, min(1000, int(value)))
+                self.sample_rate_hz = max(self.RATE_MIN, min(self.RATE_MAX, int(value)))
             elif key == "FORMAT":
                 candidate = value.upper()
                 if candidate not in {"ASCII", "BINARY"}:

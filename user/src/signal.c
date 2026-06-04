@@ -192,9 +192,3 @@ uint16_t signal_get_sample_rate(void)
 {
     return g_signal.sample_rate_hz;
 }
-
-uint16_t signal_get_interval_ms(void)
-{
-    uint16_t interval = (uint16_t)(1000U / g_signal.sample_rate_hz);
-    return interval == 0U ? 1U : interval;
-}

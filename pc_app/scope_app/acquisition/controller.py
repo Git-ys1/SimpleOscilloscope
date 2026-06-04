@@ -30,6 +30,7 @@ class AcquisitionController:
         self._thread = threading.Thread(target=self._reader_loop, name="scope-acquisition", daemon=True)
         self._thread.start()
         self.send("ID?")
+        self.send("CAP?")
         self.send("STATUS")
         self.events.put(("state", self.state))
 

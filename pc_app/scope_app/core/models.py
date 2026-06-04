@@ -17,16 +17,22 @@ class RunState(str, Enum):
 @dataclass(frozen=True)
 class ConnectionConfig:
     source: str
-    baud: int = 115200
+    baud: int = 921600
 
 
 @dataclass(frozen=True)
 class SignalConfig:
     wave: str = "SINE"
-    frequency_hz: int = 5
+    frequency_hz: int = 1000
     amplitude_mv: int = 1200
     offset_mv: int = 1650
-    sample_rate_hz: int = 100
+    sample_rate_hz: int = 10_000
+
+
+class DisplayMode:
+    ROLL = "滚动"
+    TRIGGERED = "触发"
+    STOPPED = "停止"
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,7 @@ class DisplayConfig:
     horizontal_offset_s: float = 0.0
     vertical_center_mv: float = 1650.0
     auto_range: bool = True
+    display_mode: str = DisplayMode.TRIGGERED
 
 
 @dataclass(frozen=True)
@@ -43,7 +50,7 @@ class TriggerConfig:
     mode: str = "Auto"
     edge: str = "Rising"
     level_mv: float = 1650.0
-    pretrigger_ratio: float = 0.2
+    pretrigger_ratio: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -56,7 +63,7 @@ class RecordConfig:
 @dataclass(frozen=True)
 class SampleFrame:
     sequence: int
-    time_ms: int
+    time_ms: float
     value_mv: float
     wave: str
     frequency_hz: int
@@ -94,6 +101,16 @@ class DeviceIdentity:
     version: str
     transport: str
     output: str = ""
+
+
+@dataclass(frozen=True)
+class DeviceCapabilities:
+    rate_min: int = 1
+    rate_max: int = 20_000
+    freq_min: int = 1
+    freq_max: int = 5_000
+    baud: int = 921600
+    block_points: int = 64
 
 
 @dataclass(frozen=True)

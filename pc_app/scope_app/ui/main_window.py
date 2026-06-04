@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtWidgets
 from ..core.app_settings import AppSettingsStore
 from ..version import APP_NAME, APP_ORG, APP_VERSION
 from . import theme
+from .i18n import t
 from .measurement_panel import MeasurementPanel as MeasurementBar
 from .panels.acquisition_panel import AcquisitionPanel
 from .panels.connection_panel import ConnectionPanel
@@ -39,6 +40,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(self.status)
 
         self.workspace = ScopeWorkspace(self.waveform, self.measurement_bar, settings, self.settings_store, self)
+        self.quality_hint = QtWidgets.QLabel("")
+        self.quality_hint.setObjectName("qualityHint")
+        self.quality_hint.setVisible(False)
 
         self.connection_panel = ConnectionPanel(settings.source, settings.baud)
         self.acquisition_panel = AcquisitionPanel()
@@ -81,6 +85,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.waveform, 1)
+        layout.addWidget(self.quality_hint, 0)
         layout.addWidget(self.measurement_bar, 0)
         self.setCentralWidget(central)
 
@@ -89,69 +94,66 @@ class MainWindow(QtWidgets.QMainWindow):
         self._build_dock()
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("File")
-        export_action = file_menu.addAction("Export CSV")
+        file_menu = self.menuBar().addMenu(t("file"))
+        export_action = file_menu.addAction(t("export_csv"))
         export_action.triggered.connect(lambda: self.workspace.export_csv_dialog(self))
         file_menu.addSeparator()
-        quit_action = file_menu.addAction("Exit")
+        quit_action = file_menu.addAction(t("exit"))
         quit_action.triggered.connect(self.close)
 
-        help_menu = self.menuBar().addMenu("Help")
+        help_menu = self.menuBar().addMenu(t("help"))
         safety_action = help_menu.addAction("接线与安全说明")
         safety_action.triggered.connect(self.show_safety_dialog)
-        about_action = help_menu.addAction("About SimpleScope PC")
+        about_action = help_menu.addAction(t("about"))
         about_action.triggered.connect(self.show_about_dialog)
 
     def show_about_dialog(self) -> None:
         QtWidgets.QMessageBox.about(
             self,
-            f"About {APP_NAME}",
+            t("about_title"),
             f"<b>{APP_NAME}</b><br>"
-            f"Version: {APP_VERSION}<br>"
-            f"Organization: {APP_ORG}<br><br>"
-            "A compact STM32 oscilloscope upper-computer application.",
+            f"版本: {APP_VERSION}<br>"
+            f"组织: {APP_ORG}<br><br>"
+            "STM32 简易示波器上位机。",
         )
 
     def _build_toolbar(self) -> None:
-        toolbar = self.addToolBar("Scope")
+        toolbar = self.addToolBar(t("scope_controls"))
         toolbar.setMovable(False)
         actions = [
-            ("Connect", self.connection_panel._connect),
-            ("Run", lambda: self.workspace.send_command("START")),
-            ("Stop", lambda: self.workspace.send_command("STOP")),
-            ("Single", self.workspace.rearm_single),
-            ("AutoSet", self.workspace.auto_scale),
-            ("Demo", lambda: self.workspace.run_demo("fake://sine")),
-            ("Export", lambda: self.workspace.export_csv_dialog(self)),
+            (t("connect"), self.connection_panel._connect),
+            (t("run"), lambda: self.workspace.send_command("START")),
+            (t("stop"), lambda: self.workspace.send_command("STOP")),
+            (t("single"), self.workspace.rearm_single),
+            (t("autoset"), self.workspace.auto_scale),
+            (t("demo"), lambda: self.workspace.run_demo("fake://sine")),
+            (t("export"), lambda: self.workspace.export_csv_dialog(self)),
         ]
         for text, slot in actions:
             action = toolbar.addAction(text)
             action.triggered.connect(lambda _checked=False, slot=slot: slot())
 
     def _build_dock(self) -> None:
-        dock_content = QtWidgets.QWidget()
-        dock_layout = QtWidgets.QVBoxLayout(dock_content)
-        dock_layout.setContentsMargins(10, 10, 10, 10)
-        dock_layout.setSpacing(10)
+        tabs = QtWidgets.QTabWidget()
+        tabs.setDocumentMode(True)
         for title, panel in [
-            ("Connection 连接", self.connection_panel),
-            ("Acquisition 采集", self.acquisition_panel),
-            ("Display 显示", self.display_panel),
-            ("Trigger 触发", self.trigger_panel),
-            ("Measurements 测量", self.measurement_panel),
-            ("Signal Generator 测试信号源", self.signal_panel),
+            ("连接", self.connection_panel),
+            ("采集", self.acquisition_panel),
+            ("显示", self.display_panel),
+            ("触发", self.trigger_panel),
+            ("测量", self.measurement_panel),
+            ("信号源", self.signal_panel),
         ]:
-            dock_layout.addWidget(self._section(title, panel))
-        dock_layout.addStretch(1)
+            wrapper = QtWidgets.QWidget()
+            layout = QtWidgets.QVBoxLayout(wrapper)
+            layout.setContentsMargins(10, 10, 10, 10)
+            layout.addWidget(panel)
+            layout.addStretch(1)
+            tabs.addTab(wrapper, title)
 
-        scroll = QtWidgets.QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(dock_content)
-        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-
-        dock = QtWidgets.QDockWidget("Scope Controls", self)
+        dock = QtWidgets.QDockWidget(t("scope_controls"), self)
         dock.setObjectName("ScopeControlsDock")
-        dock.setWidget(scroll)
+        dock.setWidget(tabs)
         dock.setFeatures(QtWidgets.QDockWidget.DockWidgetMovable | QtWidgets.QDockWidget.DockWidgetFloatable)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
 
@@ -182,7 +184,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.workspace.device_identity_changed.connect(self.connection_panel.set_device_identity)
         self.workspace.message_changed.connect(self.status.set_scope_message)
         self.workspace.display_changed.connect(self.display_panel.set_display_values)
+        self.workspace.trigger_changed.connect(self.trigger_panel.set_trigger_values)
         self.workspace.sample_rate_changed.connect(self.acquisition_panel.set_sample_rate)
+        self.workspace.capabilities_changed.connect(self.acquisition_panel.set_capabilities)
+        self.workspace.capabilities_changed.connect(self.signal_panel.set_capabilities)
+        self.workspace.quality_changed.connect(self._set_quality_hint)
 
     def _sync_initial_state(self, source: str) -> None:
         self.status.set_source(source)
@@ -191,6 +197,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.connection_panel.set_source(source)
         self.connection_panel.set_protocol("BINARY")
         self.display_panel.set_display_values(self.workspace.display_config)
+        self.trigger_panel.set_trigger_values(self.workspace.trigger_config)
 
     def _set_safety_auto_show(self, show: bool) -> None:
         self.workspace.settings = replace(self.workspace.settings, show_safety_on_start=show)
@@ -205,3 +212,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(theme.app_stylesheet())
+
+    def _set_quality_hint(self, text: str) -> None:
+        self.quality_hint.setText(text)
+        self.quality_hint.setVisible(bool(text))

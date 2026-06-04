@@ -5,9 +5,21 @@
 static volatile uint32_t g_ms_ticks;
 static uint8_t g_led_on;
 
+__weak void board_sample_timer_tick(void)
+{
+}
+
 void SysTick_Handler(void)
 {
     g_ms_ticks++;
+}
+
+void TIM2_IRQHandler(void)
+{
+    if ((TIM2->SR & TIM_SR_UIF) != 0U) {
+        TIM2->SR = (uint16_t)~TIM_SR_UIF;
+        board_sample_timer_tick();
+    }
 }
 
 uint32_t board_millis(void)
@@ -57,12 +69,23 @@ static void board_pwm_init(void)
     TIM1->EGR = TIM_EGR_UG;
 }
 
+static void board_sample_timer_init(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+    TIM2->PSC = (uint16_t)((SystemCoreClock / 1000000U) - 1U);
+    TIM2->DIER = TIM_DIER_UIE;
+    TIM2->CR1 = TIM_CR1_ARPE | TIM_CR1_CEN;
+    NVIC_EnableIRQ(TIM2_IRQn);
+    board_sample_timer_set_rate(OSC_DEFAULT_RATE_HZ);
+}
+
 void board_init(void)
 {
     SystemCoreClockUpdate();
     board_gpio_init();
     board_pwm_init();
     SysTick_Config(SystemCoreClock / 1000U);
+    board_sample_timer_init();
 }
 
 void board_led_set(uint8_t on)
@@ -94,4 +117,23 @@ void board_pwm_set_mv(uint16_t millivolts)
     }
 
     TIM1->CCR1 = (uint16_t)duty;
+}
+
+void board_sample_timer_set_rate(uint16_t sample_rate_hz)
+{
+    uint32_t arr;
+
+    if (sample_rate_hz < OSC_MIN_RATE_HZ) {
+        sample_rate_hz = OSC_MIN_RATE_HZ;
+    }
+    if (sample_rate_hz > OSC_MAX_RATE_HZ) {
+        sample_rate_hz = OSC_MAX_RATE_HZ;
+    }
+
+    arr = (1000000UL / (uint32_t)sample_rate_hz);
+    if (arr == 0UL) {
+        arr = 1UL;
+    }
+    TIM2->ARR = (uint16_t)(arr - 1UL);
+    TIM2->EGR = TIM_EGR_UG;
 }

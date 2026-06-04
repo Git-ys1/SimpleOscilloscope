@@ -2,10 +2,10 @@
 
 ## 下载和安装
 
-V0.9.1 起，普通用户优先使用发布页里的 Windows 包，不需要安装 Python：
+V0.9.1 起，普通用户优先使用发布页里的 Windows 包，不需要安装 Python。V0.9.2 起，示波器界面改为中文页签控制面板，默认支持 1 kHz 测试信号和 10/20 kSa/s 采样预设：
 
-- `SimpleScopePC-0.9.1-win64-portable.zip`：便携版，解压后运行 `SimpleScopePC.exe`。
-- `SimpleScopePC-0.9.1-Setup.exe`：安装版，按向导安装后从开始菜单启动。
+- `SimpleScopePC-0.9.2-win64-portable.zip`：便携版，解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.2-Setup.exe`：安装版，按向导安装后从开始菜单启动。
 
 源码仓库仍保留开发者入口，适合调试、二次开发和本地验证。
 
@@ -32,7 +32,7 @@ tools\run_scope.bat --source fake://sine --connect
 simplescope-pc --source fake://sine --connect
 ```
 
-软件打开后也可以点击顶部工具栏的 `Demo`，它会自动切换到 `fake://sine` 并连接。当前支持：
+软件打开后也可以点击顶部工具栏的 `演示`，它会自动切换到 `fake://sine` 并连接。当前支持：
 
 - `fake://sine`
 - `fake://square`
@@ -47,16 +47,16 @@ simplescope-pc --source fake://sine --connect
 3. 启动上位机：
 
 ```bat
-tools\run_scope.bat --source COM14 --baud 115200 --connect
+tools\run_scope.bat --source COM14 --baud 921600 --connect
 ```
 
 或：
 
 ```bat
-simplescope-pc --source COM14 --baud 115200 --connect
+simplescope-pc --source COM14 --baud 921600 --connect
 ```
 
-如果串口号不是 `COM14`，在右侧 `Connection 连接` 面板里点击 `Scan Ports` 后选择对应 COM 口。
+如果串口号不是 `COM14`，在右侧 `连接` 页签里点击 `扫描串口` 后选择对应 COM 口。
 
 ## 连接 TCP 模拟器
 
@@ -72,7 +72,7 @@ python simulator\mcu_simulator.py
 tools\run_scope.bat --source tcp://127.0.0.1:8765 --connect
 ```
 
-便携版或安装版也可以在窗口右侧 `Connection 连接` 面板里把 Source 改为 `tcp://127.0.0.1:8765` 后连接。
+便携版或安装版也可以在窗口右侧 `连接` 页签里把数据源改为 `tcp://127.0.0.1:8765` 后连接。
 
 ## 打包命令
 
@@ -87,8 +87,8 @@ tools\build_installer.bat
 产物默认输出到：
 
 - `dist\SimpleScopePC\SimpleScopePC.exe`
-- `dist\SimpleScopePC-0.9.1-win64-portable.zip`
-- `dist\installer\SimpleScopePC-0.9.1-Setup.exe`
+- `dist\SimpleScopePC-0.9.2-win64-portable.zip`
+- `dist\installer\SimpleScopePC-0.9.2-Setup.exe`
 
 安装包构建需要本机已安装 Inno Setup。
 
@@ -97,47 +97,47 @@ tools\build_installer.bat
 中央区域是示波器屏幕：
 
 - 左上角显示 CH1、Volt/div、耦合和探头倍率。
-- 右上角显示 `RUN` / `STOP` / `WAIT` / `TRIG`。
-- 底部显示 time/div、采样率和记录长度。
+- 右上角显示 `运行` / `停止` / `等待触发` / `已触发`。
+- 底部显示时基、采样率和记录长度。
 - 没有连接时会显示数据源选择和安全提示。
 
 ## 调整显示
 
-在 `Display 显示` 面板里调整：
+在 `显示` 页签里调整：
 
 - `Time/div`：水平时基。
 - `Volt/div`：垂直档位。
-- `Horizontal`：水平位置。
-- `Vertical`：垂直中心。
-- `AutoSet`：自动调整垂直量程。
-- `Grid`：显示或隐藏网格。
+- `水平位置`：移动触发记录。
+- `垂直中心`：设置波形中心。
+- `自动设置`：自动调整时基、垂直档位和触发电平。
+- `网格`：显示或隐藏网格。
 
 ## 使用触发
 
-在 `Trigger 触发` 面板里设置：
+在 `触发` 页签里设置：
 
-- `Mode`：Auto、Normal、Single。
-- `Edge`：Rising 或 Falling。
-- `Source`：当前为 CH1。
-- `Level mV`：触发电平。
-- `Pre-trigger`：触发点在屏幕中的位置。
+- `模式`：Auto、Normal、Single。
+- `边沿`：上升沿或下降沿。
+- `数据源`：当前为 CH1。
+- `电平 mV`：触发电平。
+- `预触发`：触发点在屏幕中的位置，默认 50%。
 
-`Normal` 模式未触发时会显示 `WAIT`，触发后显示 `TRIG`。
+`Normal` 模式未触发时会显示 `等待触发`，触发后显示 `已触发`。
 
 ## 测量
 
-底部测量栏和右侧 `Measurements 测量` 面板显示：
+底部测量栏和右侧 `测量` 页签显示：
 
 - Vmax / Vmin / Vpp / Vavg
 - Vrms DC / Vrms AC
-- Frequency / Period / Duty Cycle
-- Sample Count
+- 频率 / 周期 / 占空比
+- 采样点数
 
 AC RMS 会先去掉平均值，避免被 1.65V 偏置污染。
 
 ## 导出 CSV
 
-点击顶部 `Export` 或菜单 `File -> Export CSV`，选择保存路径即可导出当前环形缓冲里的波形数据。
+点击顶部 `导出` 或菜单 `文件 -> 导出 CSV`，选择保存路径即可导出当前环形缓冲里的波形数据。
 
 ## 安全接线
 

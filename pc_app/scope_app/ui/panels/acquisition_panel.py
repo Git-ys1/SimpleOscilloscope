@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
-from ...core.models import AcquisitionStats
+from ...core.models import AcquisitionStats, DeviceCapabilities
+from ..i18n import t
 
 
 class AcquisitionPanel(QtWidgets.QWidget):
@@ -13,9 +14,23 @@ class AcquisitionPanel(QtWidgets.QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self.capabilities = DeviceCapabilities()
+        self.sample_rate_preset = QtWidgets.QComboBox()
+        for label, value in [
+            ("1 kSa/s", 1_000),
+            ("2 kSa/s", 2_000),
+            ("5 kSa/s", 5_000),
+            ("10 kSa/s", 10_000),
+            ("20 kSa/s", 20_000),
+            (t("custom"), 0),
+        ]:
+            self.sample_rate_preset.addItem(label, value)
+        self.sample_rate_preset.setCurrentIndex(3)
+        self.sample_rate_preset.currentIndexChanged.connect(self._apply_rate_preset)
+
         self.sample_rate = QtWidgets.QSpinBox()
-        self.sample_rate.setRange(1, 1000)
-        self.sample_rate.setValue(100)
+        self.sample_rate.setRange(self.capabilities.rate_min, self.capabilities.rate_max)
+        self.sample_rate.setValue(10_000)
         self.record_length = QtWidgets.QSpinBox()
         self.record_length.setRange(128, 200_000)
         self.record_length.setSingleStep(128)
@@ -26,15 +41,16 @@ class AcquisitionPanel(QtWidgets.QWidget):
         self.channel_ch2.setEnabled(False)
         self.actual_rate = QtWidgets.QLabel("--")
         self.block_count = QtWidgets.QLabel("--")
+        self.block_points = QtWidgets.QLabel(str(self.capabilities.block_points))
         self.dropped = QtWidgets.QLabel("--")
         self.rx_rate = QtWidgets.QLabel("--")
 
-        run_btn = QtWidgets.QPushButton("Run")
+        run_btn = QtWidgets.QPushButton(t("run"))
         run_btn.setObjectName("primaryButton")
-        stop_btn = QtWidgets.QPushButton("Stop")
-        single_btn = QtWidgets.QPushButton("Single")
-        clear_btn = QtWidgets.QPushButton("Clear Buffer")
-        apply_rate_btn = QtWidgets.QPushButton("Apply Sample Rate")
+        stop_btn = QtWidgets.QPushButton(t("stop"))
+        single_btn = QtWidgets.QPushButton(t("single"))
+        clear_btn = QtWidgets.QPushButton(t("clear_buffer"))
+        apply_rate_btn = QtWidgets.QPushButton(t("apply_sample_rate"))
 
         run_btn.clicked.connect(lambda: self.command_requested.emit("START"))
         stop_btn.clicked.connect(lambda: self.command_requested.emit("STOP"))
@@ -49,14 +65,16 @@ class AcquisitionPanel(QtWidgets.QWidget):
         buttons.addWidget(clear_btn, 1, 1)
 
         form = QtWidgets.QFormLayout()
-        form.addRow("Sample Rate", self.sample_rate)
-        form.addRow("Record Length", self.record_length)
-        form.addRow("Channel Enable", self.channel_ch1)
+        form.addRow(t("preset"), self.sample_rate_preset)
+        form.addRow(t("sample_rate"), self.sample_rate)
+        form.addRow(t("record_length"), self.record_length)
+        form.addRow(t("channel_enable"), self.channel_ch1)
         form.addRow("", self.channel_ch2)
-        form.addRow("Actual Fs", self.actual_rate)
-        form.addRow("Blocks", self.block_count)
-        form.addRow("Rx FPS", self.rx_rate)
-        form.addRow("Dropped", self.dropped)
+        form.addRow(t("actual_fs"), self.actual_rate)
+        form.addRow(t("blocks"), self.block_count)
+        form.addRow(t("block_points"), self.block_points)
+        form.addRow(t("rx_fps"), self.rx_rate)
+        form.addRow(t("dropped"), self.dropped)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addLayout(buttons)
@@ -71,3 +89,17 @@ class AcquisitionPanel(QtWidgets.QWidget):
 
     def set_sample_rate(self, sample_rate_hz: int) -> None:
         self.sample_rate.setValue(sample_rate_hz)
+
+    def set_capabilities(self, capabilities: DeviceCapabilities) -> None:
+        self.capabilities = capabilities
+        self.sample_rate.setRange(capabilities.rate_min, capabilities.rate_max)
+        self.block_points.setText(str(capabilities.block_points))
+        for index in range(self.sample_rate_preset.count()):
+            value = int(self.sample_rate_preset.itemData(index))
+            enabled = value == 0 or capabilities.rate_min <= value <= capabilities.rate_max
+            self.sample_rate_preset.model().item(index).setEnabled(enabled)
+
+    def _apply_rate_preset(self) -> None:
+        value = int(self.sample_rate_preset.currentData())
+        if value > 0:
+            self.sample_rate.setValue(value)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..core.models import AckFrame, DeviceIdentity, DeviceStatus, ErrorFrame, SampleFrame, TextFrame
+from ..core.models import AckFrame, DeviceCapabilities, DeviceIdentity, DeviceStatus, ErrorFrame, SampleFrame, TextFrame
 
 
 class AsciiProtocol:
@@ -40,6 +40,8 @@ class AsciiProtocol:
                     transport=parts[4],
                     output=parts[5] if len(parts) > 5 else "",
                 )
+            if kind == "CAP" and len(parts) >= 2:
+                return _parse_capabilities(parts[1:])
             if kind == "BOOT":
                 return TextFrame("BOOT", text)
             if kind == "OK" and len(parts) >= 2:
@@ -52,3 +54,21 @@ class AsciiProtocol:
             return ErrorFrame(f"parse:{exc}")
 
         return TextFrame("RAW", text)
+
+
+def _parse_capabilities(parts: list[str]) -> DeviceCapabilities:
+    values: dict[str, int] = {}
+    for part in parts:
+        key, sep, value = part.partition("=")
+        if not sep:
+            continue
+        values[key.strip().lower()] = int(value.strip())
+    defaults = DeviceCapabilities()
+    return DeviceCapabilities(
+        rate_min=values.get("rate_min", defaults.rate_min),
+        rate_max=values.get("rate_max", defaults.rate_max),
+        freq_min=values.get("freq_min", defaults.freq_min),
+        freq_max=values.get("freq_max", defaults.freq_max),
+        baud=values.get("baud", defaults.baud),
+        block_points=values.get("block", values.get("block_points", defaults.block_points)),
+    )

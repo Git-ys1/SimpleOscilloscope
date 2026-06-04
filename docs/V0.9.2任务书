@@ -1,0 +1,553 @@
+对，这一版还不够像示波器。不是你感觉错了，而是现在几个核心逻辑确实还停留在“波形调试工具”阶段：
+采样率太低、信号源频率被限制、波形显示是滚动数据视角、触发没有真正决定屏幕中心、界面中英文混杂。
+
+我看了最新 main：你们现在已经有上位机打包发布链路、PySide6 + PyQtGraph + NumPy + pySerial、fake:// 数据源、二进制协议、安装包脚本和 GitHub Actions，这部分比之前成熟很多。README 里也写了 v0.9.1 起支持 simplescope-pc、PyInstaller 便携版、portable zip、Inno Setup 安装包和 tag 构建。
+但你截图暴露的是示波器体验层没打磨好，这个比“能不能打包成 exe”更关键。
+
+先说最严重的问题：1 kHz 现在根本不该拿来显示
+
+你现在下位机配置里写的是：
+
+#define OSC_UART_BAUD 115200U
+#define OSC_DEFAULT_RATE_HZ 100U
+#define OSC_MAX_RATE_HZ 1000U
+#define OSC_DEFAULT_FREQ_HZ 5U
+#define OSC_MAX_FREQ_HZ 500U
+#define OSC_BINARY_BLOCK_POINTS 16U
+
+也就是说，固件默认采样率只有 100 Sa/s，最大也只有 1000 Sa/s，信号频率上限是 500 Hz。
+上位机采样率输入框也被硬限制在 1~1000，默认 100。
+测试信号源频率输入框也被硬限制在 1~500，默认 5。
+
+所以你说“上位机选不到 1 kHz”，根因不是界面小问题，而是固件、fake 数据源、上位机 UI 三处都把频率/采样率卡死了。
+
+更关键的是：即使你把信号频率强行改成 1 kHz，现在 1 kSa/s 的采样率也没法像示波器一样看清 1 kHz 波形。Tektronix 的示波器资料里提到，线性插值时采样率应至少达到最高频率成分的 10 倍；即使按更宽松的重建要求，也要明显高于信号频率。
+所以要显示 1 kHz 波形，建议至少：
+
+信号频率：1 kHz
+采样率：10 kSa/s 起步，最好 20 kSa/s
+串口：115200 不够，建议 921600 或更高
+每帧点数：16 太小，建议 64 或 128
+
+现在 main.c 里采样调度基于 board_millis()，采样间隔是 signal_get_interval_ms()，而 signal_get_interval_ms() 又是 1000 / sample_rate_hz，这天然把有效时间精度限制在毫秒级；超过 1000 Sa/s 后间隔会被压成 1 ms，根本不是高采样率设计。
+
+结论：下位机必须改。
+不是“把最大值改大”就完事，而是要从 millis 轮询采样改成定时器采样，至少做出 10 kSa/s 或 20 kSa/s 的稳定采样/模拟数据输出。
+
+第二个大问题：当前波形显示逻辑不是示波器，而是“向右对齐的滚动图”
+
+你截图里波形被挤在左半边，看起来不像示波器，根因在 waveform_view.py：
+
+reference = float(time_ms[-1] if reference_time_ms is None else reference_time_ms)
+x = (time_ms - reference) / 1000.0
+...
+right = self._config.horizontal_offset_s
+self.setXRange(right - time_span, right, padding=0.0)
+
+也就是：永远把最新采样点当作 0 秒，整个显示窗口是 [-time_span, 0]。
+这更像“数据流监视器”或“滚动趋势图”，不是典型数字示波器的触发显示逻辑。
+
+成熟示波器不是这样组织画面的。Tektronix 对数字示波器触发位置的解释是：水平触发位置决定波形记录中触发点的位置，用来观察触发前后的波形。
+Rohde & Schwarz 也把示波器水平系统分成波形显示和采样率，sec/div 控制每格时间，位置控制用来水平移动波形。
+
+所以你们现在应该改成：
+
+普通示波器模式：
+触发点在屏幕中央或 40% 位置
+x 轴范围不是 [-span, 0]
+而是 [-pretrigger * span, (1 - pretrigger) * span]
+
+默认 pretrigger = 50%
+也就是 x 轴默认 [-span/2, +span/2]
+
+这样波形才会“完整地显示在画面中间”，而不是永远被挤到左边或右边。
+
+第三个问题：AutoSet 现在不是真正的示波器自动设置
+
+RIGOL DS1000Z 用户手册里提到，自动设置会根据输入信号调整垂直档位、水平时基、触发模式和触发电平，使波形更容易显示。
+你现在的 AutoSet 更偏向“Y 轴自动缩放”，而不是完整示波器 AutoSet。
+
+真正应该做：
+
+输入一段波形
+↓
+估算频率、周期、Vpp、中心电压
+↓
+设置 Volt/div：让波形高度占 5~6 格
+↓
+设置 Time/div：让屏幕显示 1.5~3 个周期
+↓
+设置 Trigger level：波形中点
+↓
+设置 Trigger position：屏幕中央或 40%
+↓
+刷新显示
+
+比如 1 kHz 波形，周期 1 ms，若希望屏幕显示约 2 个周期：
+
+总时间窗 ≈ 2 ms
+10 格横向
+Time/div ≈ 0.2 ms/div
+
+现在截图里是 0.1 s/div，总窗口 1 秒，拿来看 1 kHz 肯定离谱；即使是你图里的 2 Hz，也因为采样/触发/显示逻辑没处理好，视觉上不像示波器。
+
+第四个问题：界面还是半英文半中文，要彻底中文化
+
+你截图里有：
+
+File / Help
+Connect / Run / Stop / Single / AutoSet / Demo / Export
+Scope Controls
+Connection
+Source
+Baudrate
+Protocol
+Sample Rate
+Record Length
+Actual Fs
+Blocks
+Rx FPS
+
+这些全部要改。你要的是课程/比赛/展示用软件，中文更直观。建议保留少数行业缩写，比如 CH1、Vpp、RMS、DC、AC，其他全部中文。
+
+建议改成：
+
+现在	改成
+File	文件
+Help	帮助
+Connect	连接
+Run	运行
+Stop	停止
+Single	单次
+AutoSet	自动设置
+Demo	演示
+Export	导出
+Scope Controls	控制面板
+Connection 连接	连接设置
+Acquisition 采集	采集设置
+Display 显示	显示设置
+Trigger 触发	触发设置
+Measurements 测量	测量结果
+Signal Generator 测试信号源	测试信号源
+Source	数据源
+Baudrate	波特率
+Protocol	协议
+Sample Rate	采样率
+Record Length	采样深度
+Actual Fs	实际采样率
+Blocks	数据块
+Rx FPS	接收帧率
+Dropped	丢包
+
+这个不应该一个个控件手改，而应该加一个：
+
+pc_app/scope_app/ui/i18n.py
+
+集中管理文本，后面才不会漏。
+
+第五个问题：右侧控制面板太像“开发参数表”，不像示波器
+
+成熟示波器的核心控制一般围绕：
+
+垂直系统：V/div、位置、耦合、探头倍率
+水平系统：s/div、水平位置、采样率、存储深度
+触发系统：触发源、边沿、触发电平、触发模式
+采集系统：运行、停止、单次、自动
+测量系统：Vpp、频率、周期、RMS、占空比
+
+Tektronix 的示波器基础资料也把系统分成垂直、水平、触发、显示等控制体系。
+Keysight 对基础测量也列出周期、频率、RMS、峰峰值等典型示波器测量项。
+
+你现在右侧是一个长滚动条，把连接、采集、显示、触发、测量、信号源全部塞在一起。结果就是：用户找不到 1 kHz 在哪调，也分不清“采样率”和“测试信号频率”。
+
+建议把右侧改成页签，不要竖向堆到底：
+
+[连接] [采集] [显示] [触发] [测量] [信号源]
+
+或者做成类似示波器软菜单：
+
+右侧只显示当前选中的功能页
+底部/顶部按钮切换：通道 / 时基 / 触发 / 测量 / 信号源
+
+这样更像仪器，不像配置表单。
+
+直接给 Codex 的修改任务书
+
+下面这份你可以直接丢给本地 Codex。重点是先修“像不像示波器”，不是继续做包装。
+
+任务名称
+v0.9.2 示波器体验修复：高采样率、居中触发显示、中文化、AutoSet 重做
+总目标
+
+把 SimpleScope PC 从“能画波形的调试工具”改成“真正像示波器的上位机”。本轮必须解决：
+
+1. 1 kHz 测试信号无法选择/无法正确显示
+2. 波形显示强制靠左/靠右，不在屏幕中心
+3. AutoSet 不像真实示波器
+4. UI 中英文混杂
+5. 右侧控制面板太像开发参数表
+6. 采样率、信号源频率、时基三者关系不清楚
+A. 下位机必须重构采样时基
+当前问题
+
+现在固件 OSC_MAX_RATE_HZ = 1000U，OSC_MAX_FREQ_HZ = 500U，OSC_UART_BAUD = 115200U，OSC_BINARY_BLOCK_POINTS = 16U。这些设置不适合 1 kHz 波形显示。
+
+更严重的是，主循环使用 board_millis() 和 signal_get_interval_ms() 进行采样调度；signal_get_interval_ms() 使用 1000 / sample_rate_hz，所以时间分辨率是毫秒级，无法稳定做 10 kSa/s 或 20 kSa/s。
+
+修改要求
+
+固件分两档实现。
+
+第一档，快速修复版：
+
+#define OSC_UART_BAUD 921600U
+#define OSC_DEFAULT_RATE_HZ 10000U
+#define OSC_MAX_RATE_HZ 20000U
+#define OSC_DEFAULT_FREQ_HZ 1000U
+#define OSC_MAX_FREQ_HZ 5000U
+#define OSC_BINARY_BLOCK_POINTS 64U
+
+但注意：只改宏还不够，因为当前 millis 调度撑不起 10 kSa/s。
+
+第二档，正确实现版：
+
+1. 新增 TIM2 或 TIM3 作为采样定时器。
+2. 采样定时器频率由 SET RATE n 控制。
+3. 不再用 board_millis() 决定采样间隔。
+4. 每次定时器到达后产生一个 sample。
+5. sample 写入环形缓冲。
+6. 主循环只负责协议发送和命令处理。
+7. 二进制帧每 64 或 128 点发送一次。
+8. 上位机根据 sample_rate_hz 和 sequence 重建时间轴。
+验收标准
+SET RATE 10000 后，Actual Fs 应接近 10 kSa/s。
+SET FREQ 1000 后，上位机能显示约 1 kHz 波形。
+1 kHz 正弦波在 AutoSet 后应显示 1.5~3 个周期。
+串口不应明显卡死。
+
+如果 921600 在当前 CH340 上不稳定，允许先用 460800，但必须在 UI 明确显示当前带宽限制。
+
+B. 上位机不要硬编码 1~1000 Hz 采样率
+当前问题
+
+AcquisitionPanel 里采样率输入框被硬编码为 1~1000，默认 100。
+SignalGeneratorPanel 里信号源频率被硬编码为 1~500，默认 5。
+fake 数据源也默认 5 Hz、200 Sa/s，并把 FREQ 限制到 500、RATE 限制到 1000。
+
+修改要求
+
+新增能力协商：
+
+PC 连接后发送：CAP?
+固件返回：
+CAP,RATE_MIN=1,RATE_MAX=20000,FREQ_MIN=1,FREQ_MAX=5000,BAUD=921600,BLOCK=64
+
+上位机收到后：
+
+采样率输入范围 = RATE_MIN ~ RATE_MAX
+信号源频率范围 = FREQ_MIN ~ FREQ_MAX
+数据块长度显示 = BLOCK
+
+如果固件暂时没实现 CAP?，上位机使用默认能力：
+
+DEFAULT_CAPABILITIES = {
+    "rate_min": 1,
+    "rate_max": 20000,
+    "freq_min": 1,
+    "freq_max": 5000,
+    "block_points": 64,
+}
+UI 要求
+
+采样率不要只用普通 SpinBox，改成下拉预设 + 自定义：
+
+1 kSa/s
+2 kSa/s
+5 kSa/s
+10 kSa/s
+20 kSa/s
+自定义...
+
+信号源频率也做预设：
+
+10 Hz
+50 Hz
+100 Hz
+500 Hz
+1 kHz
+2 kHz
+5 kHz
+自定义...
+C. 重做波形显示：触发点居中，不要右对齐滚动
+当前问题
+
+waveform_view.py 当前把最后一个采样点作为参考时间：
+
+reference = time_ms[-1]
+x = (time_ms - reference) / 1000.0
+
+然后把 X 轴范围设为：
+
+right = horizontal_offset_s
+x_range = [right - time_span, right]
+
+这会把显示变成“最新点在右侧的滚动图”，不是示波器触发显示。
+
+修改要求
+
+新增显示模式：
+
+class DisplayMode:
+    ROLL = "滚动"
+    TRIGGERED = "触发"
+    STOPPED = "停止"
+
+默认使用 TRIGGERED。
+
+在触发模式下：
+
+span = time_per_div_s * 10
+pre = trigger_config.pretrigger_ratio  # 默认 0.5
+left = -pre * span + horizontal_offset_s
+right = (1 - pre) * span + horizontal_offset_s
+setXRange(left, right)
+
+触发点默认在屏幕中央：
+
+pretrigger_ratio = 0.5
+触发线 x = 0
+
+如果选择 20% 预触发：
+
+pretrigger_ratio = 0.2
+触发点位于屏幕 20% 处
+数据处理要求
+
+新增：
+
+processing/record_view.py
+
+职责：
+
+输入 ring buffer + trigger result + display config
+输出当前屏幕应显示的 x/y 数据
+
+不要在 WaveformView 里决定数据截取策略。WaveformView 只负责画。
+
+验收标准
+AutoSet 后，周期波形应该显示在屏幕中央。
+触发线应该位于屏幕中央或设置的预触发位置。
+波形不应无故挤在左半边。
+停止后调整 Time/div，波形应围绕触发点缩放。
+D. AutoSet 重写成真正示波器自动设置
+当前问题
+
+现在 AutoSet 更接近“Y 轴自动范围”，没有真正统一设置时基、垂直档位、触发电平和触发位置。
+
+修改要求
+
+新增：
+
+processing/autoset.py
+
+实现：
+
+def autoset_from_waveform(time_s, voltage_mv) -> AutoSetResult:
+    ...
+
+算法要求：
+
+1. 估算 v_min、v_max、vpp、center。
+2. 估算频率和周期。
+3. Volt/div = 让 Vpp 占 5~6 格。
+4. Vertical center = 波形中心。
+5. Trigger level = 波形中心。
+6. Time/div = 让屏幕显示 1.5~3 个周期。
+7. Pretrigger = 0.5。
+8. Trigger mode = Auto。
+
+Time/div 必须选“示波器常用档位”，不要出现奇怪小数：
+
+1 us/div
+2 us/div
+5 us/div
+10 us/div
+20 us/div
+50 us/div
+100 us/div
+200 us/div
+500 us/div
+1 ms/div
+2 ms/div
+5 ms/div
+10 ms/div
+20 ms/div
+50 ms/div
+100 ms/div
+200 ms/div
+500 ms/div
+1 s/div
+
+1 kHz 波形 AutoSet 后应优先选：
+
+100 us/div 或 200 us/div
+
+看你想显示 1 个周期还是 2 个周期。
+
+E. 全界面中文化
+修改要求
+
+新增：
+
+pc_app/scope_app/ui/i18n.py
+
+把所有 UI 文本集中管理。
+
+必须替换
+File -> 文件
+Help -> 帮助
+Connect -> 连接
+Disconnect -> 断开
+Run -> 运行
+Stop -> 停止
+Single -> 单次
+AutoSet -> 自动设置
+Demo -> 演示
+Export -> 导出
+Scope Controls -> 控制面板
+Connection -> 连接设置
+Acquisition -> 采集设置
+Display -> 显示设置
+Trigger -> 触发设置
+Measurements -> 测量结果
+Signal Generator -> 测试信号源
+Source -> 数据源
+Baudrate -> 波特率
+Protocol -> 协议
+Sample Rate -> 采样率
+Record Length -> 采样深度
+Channel Enable -> 通道启用
+Actual Fs -> 实际采样率
+Blocks -> 数据块
+Rx FPS -> 接收帧率
+Dropped -> 丢包
+Waveform -> 波形
+Frequency -> 频率
+Amplitude -> 幅值
+Offset -> 偏置
+Apply -> 应用
+Start Output -> 启动输出
+Stop Output -> 停止输出
+Fit to Screen -> 适配屏幕
+Theme -> 主题
+Horizontal -> 水平位置
+Vertical -> 垂直中心
+
+允许保留：
+
+CH1
+Vpp
+Vmax
+Vmin
+RMS DC
+RMS AC
+Freq
+Duty
+DC
+AC
+
+但底部测量栏建议也用中文悬浮提示：
+
+Vpp：峰峰值
+RMS AC：交流有效值
+Duty：占空比
+F. 右侧控制面板改成页签，不要一个长滚动条
+当前问题
+
+截图中右侧所有功能塞在一个滚动面板里，用户要往下找信号源频率，体验很差。
+
+修改要求
+
+把右侧 Dock 改成：
+
+控制面板
+┌───────────────┐
+│ 连接 │ 采集 │ 显示 │ 触发 │ 测量 │ 信号源 │
+└───────────────┘
+
+每个页签只显示对应功能。
+
+优先级：
+
+第一页：连接
+第二页：采集
+第三页：显示
+第四页：触发
+第五页：测量
+第六页：信号源
+
+顶部工具栏保留常用按钮：
+
+连接 | 运行 | 停止 | 单次 | 自动设置 | 演示 | 导出
+
+但全部中文。
+
+G. 波形屏幕视觉改成“仪器屏幕”
+修改要求
+中央波形区域必须占窗口 75% 以上。
+波形屏幕去掉明显的普通图表感。
+
+X/Y 轴标题可以隐藏，改用角落读数：
+
+CH1 400 mV/div DC 1x
+时基 200 us/div
+采样率 20 kSa/s
+深度 4096 点
+左侧 Y 轴刻度不要显示 3.2, 2.8... 这种太像普通 matplotlib 图。示波器主要靠格线和 V/div。
+横向 10 大格、纵向 8 大格。
+中心线更明显。
+触发位置用上方小三角/竖线，不要只有一条虚线。
+
+右上角状态：
+
+运行 / 停止 / 等待触发 / 已触发
+
+底部测量栏中文化：
+
+峰峰值 2.40 V | 最大值 2.85 V | 最小值 449.7 mV | 平均值 1.65 V | 频率 1.00 kHz
+H. 采样率、信号频率、时基三者必须联动提示
+
+新增一个“显示质量提示”：
+
+如果 sample_rate < signal_freq * 10:
+显示黄色提示：采样率偏低，波形可能失真
+
+比如：
+
+当前信号 1 kHz，采样率 1 kSa/s：
+严重欠采样，至少建议 10 kSa/s
+
+依据是成熟示波器资料中对采样率和信号频率关系的要求：线性插值下建议采样率至少为最高频率成分的 10 倍。
+
+I. 立即修复项清单
+
+优先顺序如下：
+
+1. UI 中文化
+2. 信号源频率范围改到至少 1 kHz，可选 5 kHz
+3. 采样率范围改到至少 20 kSa/s
+4. fake:// 数据源支持 1 kHz、10 kSa/s、20 kSa/s
+5. 波形显示从右对齐滚动改成触发居中
+6. AutoSet 重写：自动时基 + 自动垂直档位 + 触发电平
+7. 右侧控制面板改为页签
+8. 固件从 millis 采样改成定时器采样
+9. 串口波特率提高到 921600
+10. 二进制块点数从 16 提高到 64 或 128
+我对当前版本的评价
+
+架构：合格，而且已经比普通课程项目强。
+你们已经有打包链路、模块化上位机、二进制协议、fake 数据源、安装包脚本和 Release 流程，这些是成熟软件的基础。README 也明确了上位机结构和数据流：Transport -> Protocol Decoder -> Acquisition -> WaveformRingBuffer -> Processing -> UI，并强调 UI 不直接读串口、不直接解包二进制协议。
+
+示波器体验：不合格。
+现在的问题不是美观，而是核心行为不像示波器：
+采样率撑不起 1 kHz；波形不是触发居中；AutoSet 不完整；右侧面板像开发者调参；语言混杂；信号源频率藏得太深。

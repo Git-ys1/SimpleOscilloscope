@@ -4,6 +4,7 @@ from PySide6 import QtCore, QtWidgets
 
 from ...core.models import ConnectionConfig, DeviceIdentity
 from ...transport.scanner import list_serial_ports
+from ..i18n import t
 
 
 class ConnectionPanel(QtWidgets.QWidget):
@@ -26,15 +27,15 @@ class ConnectionPanel(QtWidgets.QWidget):
         self.protocol_format.addItem("BINARY", "BINARY")
         self.protocol_format.addItem("ASCII", "ASCII")
 
-        self.protocol_status = QtWidgets.QLabel("Protocol: --")
-        self.device_id = QtWidgets.QLabel("Device: --")
+        self.protocol_status = QtWidgets.QLabel(f"{t('protocol')}: --")
+        self.device_id = QtWidgets.QLabel("设备: --")
         self.device_id.setWordWrap(True)
 
-        connect_btn = QtWidgets.QPushButton("Connect")
+        connect_btn = QtWidgets.QPushButton(t("connect"))
         connect_btn.setObjectName("primaryButton")
-        disconnect_btn = QtWidgets.QPushButton("Disconnect")
-        scan_btn = QtWidgets.QPushButton("Scan Ports")
-        apply_format_btn = QtWidgets.QPushButton("Apply Protocol")
+        disconnect_btn = QtWidgets.QPushButton(t("disconnect"))
+        scan_btn = QtWidgets.QPushButton(t("scan_ports"))
+        apply_format_btn = QtWidgets.QPushButton(t("apply_protocol"))
 
         connect_btn.clicked.connect(self._connect)
         disconnect_btn.clicked.connect(self.disconnect_requested.emit)
@@ -42,9 +43,9 @@ class ConnectionPanel(QtWidgets.QWidget):
         apply_format_btn.clicked.connect(lambda: self.format_requested.emit(str(self.protocol_format.currentData())))
 
         form = QtWidgets.QFormLayout()
-        form.addRow("Source", self.source)
-        form.addRow("Baudrate", self.baud)
-        form.addRow("Protocol", self.protocol_format)
+        form.addRow(t("source"), self.source)
+        form.addRow(t("baudrate"), self.baud)
+        form.addRow(t("protocol"), self.protocol_format)
 
         buttons = QtWidgets.QGridLayout()
         buttons.addWidget(connect_btn, 0, 0)
@@ -72,17 +73,17 @@ class ConnectionPanel(QtWidgets.QWidget):
 
     def set_protocol(self, protocol: str) -> None:
         protocol = protocol.upper()
-        self.protocol_status.setText(f"Protocol: {protocol}")
+        self.protocol_status.setText(f"{t('protocol')}: {protocol}")
         index = self.protocol_format.findData(protocol)
         if index >= 0:
             self.protocol_format.setCurrentIndex(index)
 
     def set_device_identity(self, identity: DeviceIdentity | None) -> None:
         if identity is None:
-            self.device_id.setText("Device: --")
+            self.device_id.setText("设备: --")
             return
         extra = f" / {identity.output}" if identity.output else ""
-        self.device_id.setText(f"Device: {identity.name} {identity.version} ({identity.target}, {identity.transport}{extra})")
+        self.device_id.setText(f"设备: {identity.name} {identity.version} ({identity.target}, {identity.transport}{extra})")
 
     def _connect(self) -> None:
         self.connect_requested.emit(ConnectionConfig(source=self.source.currentText().strip(), baud=self.baud.value()))

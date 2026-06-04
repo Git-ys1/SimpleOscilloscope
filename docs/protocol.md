@@ -1,15 +1,16 @@
 # Simple Oscilloscope 串口协议
 
-默认串口参数：`115200 8N1`。固件当前使用 `USART1 PA9/PA10`，如果 CH340 接在别的串口引脚，需要后续按实物接线调整固件。
+默认串口参数：`921600 8N1`。固件当前使用 `USART1 PA9/PA10`，如果 CH340 接在别的串口引脚，需要后续按实物接线调整固件。
 
 ## 上行数据
 
 固件启动：
 
 ```text
-BOOT,SimpleOscilloscope,0.7.0,STM32F103C8T6,115200
-STATUS,SINE,5,1200,1650,100,RUN
+BOOT,SimpleOscilloscope,0.9.2,STM32F103C8T6,921600
+STATUS,SINE,1000,1200,1650,10000,RUN
 FORMAT,BINARY
+CAP,RATE_MIN=1,RATE_MAX=20000,FREQ_MIN=1,FREQ_MAX=5000,BAUD=921600,BLOCK=64
 ```
 
 v0.7.0 起，固件默认使用二进制采样块。ASCII 样本帧仍可通过 `SET FORMAT ASCII` 切回，用于串口助手排查：
@@ -31,6 +32,7 @@ OSC,42,420,2301,SINE,5,1200,1650
 ```text
 PING
 ID?
+CAP?
 STATUS
 START
 STOP
@@ -38,19 +40,19 @@ SET WAVE SINE
 SET WAVE SQUARE
 SET WAVE TRI
 SET WAVE SAW
-SET FREQ 10
+SET FREQ 1000
 SET AMP 1200
 SET OFFSET 1650
-SET RATE 100
+SET RATE 10000
 SET FORMAT BINARY
 SET FORMAT ASCII
 ```
 
-固件 v0.7.0+ 的采样率命令会被限制在 `1..1000 Hz`。
+固件 v0.9.2+ 的采样率命令会被限制在 `1..20000 Hz`，测试信号频率会被限制在 `1..5000 Hz`。上位机连接后会发送 `CAP?` 并使用返回的能力范围更新采样率和信号源频率控件。
 
 ## 高速二进制数据帧
 
-v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。命令、`BOOT`、`STATUS`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
+v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。v0.9.2 起默认每块 64 点。命令、`BOOT`、`STATUS`、`CAP`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
 
 帧结构，小端序：
 

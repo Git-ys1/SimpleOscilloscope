@@ -15,7 +15,8 @@ STOP = "#ff6b6b"
 WAIT = "#ffcc66"
 ERROR = "#ff5c8a"
 
-FONT_FAMILY = "Segoe UI, Microsoft YaHei, sans-serif"
+PRIMARY_FONT = "Microsoft YaHei UI"
+FONT_FAMILY = '"Microsoft YaHei UI", "Microsoft YaHei", SimHei, "Segoe UI", sans-serif'
 CONTROL_RADIUS = 5
 PANEL_SPACING = 10
 
@@ -70,6 +71,28 @@ def app_stylesheet() -> str:
         subcontrol-origin: margin;
         left: 8px;
         padding: 0 4px;
+    }}
+    QLabel#qualityHint {{
+        background: #3a2f12;
+        color: {WAIT};
+        border-top: 1px solid #6d5520;
+        border-bottom: 1px solid #6d5520;
+        padding: 6px 10px;
+        font-weight: 600;
+    }}
+    QTabWidget::pane {{
+        border: 1px solid {BORDER};
+        border-radius: 4px;
+    }}
+    QTabBar::tab {{
+        background: {BACKGROUND};
+        border: 1px solid {BORDER};
+        padding: 6px 8px;
+        margin-right: 2px;
+    }}
+    QTabBar::tab:selected {{
+        background: #1d2a44;
+        color: #eafff6;
     }}
     QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
         background: {BACKGROUND};

@@ -1,6 +1,6 @@
 # SimpleScope PC
 
-`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。v0.9.1 起，普通用户优先使用 Windows 便携版或安装包，开发者仍可从仓库根目录通过 `tools\run_scope.bat` 或 `simplescope-pc` 启动。
+`SimpleScope PC` 是本项目的上位机应用。v0.2.1 起，它从 Tkinter 单脚本升级为 `PySide6 + PyQtGraph + NumPy + pySerial` 的分层桌面应用。v0.9.1 起，普通用户优先使用 Windows 便携版或安装包，开发者仍可从仓库根目录通过 `tools\run_scope.bat` 或 `simplescope-pc` 启动。v0.9.2 起，界面切换到中文页签控制面板，并支持触发居中显示、1 kHz 测试信号、10/20 kSa/s 采样预设和采样质量提示。
 
 ## 分层目标
 
@@ -17,20 +17,20 @@ v0.3.0 起，上位机具备基础示波器显示控制：
 
 - `Time / div`：设置水平时基。
 - `Volt / div`：设置垂直量程。
-- `H Offset`：水平位置。
-- `V Center`：垂直中心。
-- `Auto range` / `Auto Scale Now`：自动量程。
+- `水平位置`：移动触发记录在屏幕中的水平位置。
+- `垂直中心`：设置 CH1 居中电压。
+- `自动设置`：自动估算时基、垂直档位和触发电平。
 - `暂停 / 继续`：暂停期间样本不会进入显示缓冲，恢复后从新数据继续，避免长时间线段回放。
-- `Clear Buffer`：清空当前波形缓存。
-- `Export CSV`：导出当前环形缓冲里的波形数据。
+- `清空缓存`：清空当前波形缓存。
+- `导出 CSV`：导出当前环形缓冲里的波形数据。
 
 v0.4.0 起，加入触发系统：
 
-- `Mode`：`Auto` 持续刷新，`Normal` 等待触发，`Single` 捕获一次后保持。
-- `Edge`：上升沿或下降沿。
-- `Level mV`：触发电平。
-- `Pre-trigger %`：触发点在屏幕内的预触发位置。
-- `Re-arm Single`：重新武装单次触发。
+- `模式`：`Auto` 持续刷新，`Normal` 等待触发，`Single` 捕获一次后保持。
+- `边沿`：上升沿或下降沿。
+- `电平 mV`：触发电平。
+- `预触发`：触发点在屏幕内的位置，默认 50%。
+- `重装单次`：重新武装单次触发。
 
 v0.5.0 起，上位机数据层支持采样块；v0.6.0 起，常用操作界面中文化，控制区和测量区使用可滚动侧栏，避免窗口高度不足时控件不可见；v0.7.0 起，固件、模拟器、`fake://` 和上位机采集链路默认使用二进制采样块：
 
@@ -45,8 +45,8 @@ v0.5.0 起，上位机数据层支持采样块；v0.6.0 起，常用操作界面
 
 从发布页下载：
 
-- `SimpleScopePC-0.9.1-win64-portable.zip`：解压后运行 `SimpleScopePC.exe`。
-- `SimpleScopePC-0.9.1-Setup.exe`：安装后从开始菜单启动。
+- `SimpleScopePC-0.9.2-win64-portable.zip`：解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.2-Setup.exe`：安装后从开始菜单启动。
 
 ## 开发者启动
 
@@ -67,7 +67,7 @@ simplescope-pc --source fake://sine --connect
 连接真实 CH340 串口：
 
 ```bat
-tools\run_scope.bat --source COM14 --baud 115200 --connect
+tools\run_scope.bat --source COM14 --baud 921600 --connect
 ```
 
 连接 TCP 下位机模拟器时，上位机入口仍然不变，只是先另开终端启动模拟器：
@@ -88,7 +88,7 @@ tools\build_installer.bat
 产物：
 
 - `dist\SimpleScopePC\SimpleScopePC.exe`
-- `dist\SimpleScopePC-0.9.1-win64-portable.zip`
-- `dist\installer\SimpleScopePC-0.9.1-Setup.exe`
+- `dist\SimpleScopePC-0.9.2-win64-portable.zip`
+- `dist\installer\SimpleScopePC-0.9.2-Setup.exe`
 
 安装包构建需要本机已安装 Inno Setup。

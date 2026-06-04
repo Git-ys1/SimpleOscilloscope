@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
 
-from ...core.models import DisplayConfig
+from ...core.models import DisplayConfig, DisplayMode
+from ..i18n import t
 
 
 class DisplayPanel(QtWidgets.QWidget):
@@ -12,11 +13,18 @@ class DisplayPanel(QtWidgets.QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self.mode = QtWidgets.QComboBox()
+        for label, value in [
+            (DisplayMode.TRIGGERED, DisplayMode.TRIGGERED),
+            (DisplayMode.ROLL, DisplayMode.ROLL),
+            (DisplayMode.STOPPED, DisplayMode.STOPPED),
+        ]:
+            self.mode.addItem(label, value)
         self.time_div = QtWidgets.QDoubleSpinBox()
-        self.time_div.setDecimals(3)
-        self.time_div.setRange(0.001, 10.0)
-        self.time_div.setSingleStep(0.05)
-        self.time_div.setValue(0.1)
+        self.time_div.setDecimals(6)
+        self.time_div.setRange(0.000001, 10.0)
+        self.time_div.setSingleStep(0.0001)
+        self.time_div.setValue(0.0002)
         self.volt_div = QtWidgets.QDoubleSpinBox()
         self.volt_div.setDecimals(1)
         self.volt_div.setRange(1.0, 3300.0)
@@ -31,18 +39,18 @@ class DisplayPanel(QtWidgets.QWidget):
         self.v_center.setRange(-3300.0, 6600.0)
         self.v_center.setSingleStep(100.0)
         self.v_center.setValue(1650.0)
-        self.auto_range = QtWidgets.QCheckBox("Auto Range")
-        self.auto_range.setChecked(True)
-        self.grid = QtWidgets.QCheckBox("Grid")
+        self.auto_range = QtWidgets.QCheckBox(t("auto_range"))
+        self.auto_range.setChecked(False)
+        self.grid = QtWidgets.QCheckBox(t("grid"))
         self.grid.setChecked(True)
         self.theme = QtWidgets.QComboBox()
-        self.theme.addItems(["Dark", "Light 预留"])
-        self.theme.setCurrentText("Dark")
+        self.theme.addItems(["深色", "浅色 预留"])
+        self.theme.setCurrentText("深色")
         self.theme.setEnabled(False)
 
-        apply_btn = QtWidgets.QPushButton("Apply Display")
-        autoscale_btn = QtWidgets.QPushButton("AutoSet")
-        fit_btn = QtWidgets.QPushButton("Fit to Screen")
+        apply_btn = QtWidgets.QPushButton(t("apply_display"))
+        autoscale_btn = QtWidgets.QPushButton(t("autoset"))
+        fit_btn = QtWidgets.QPushButton(t("fit_to_screen"))
 
         apply_btn.clicked.connect(self._apply_display)
         autoscale_btn.clicked.connect(self.auto_scale_requested.emit)
@@ -50,13 +58,14 @@ class DisplayPanel(QtWidgets.QWidget):
         self.grid.toggled.connect(self.grid_changed.emit)
 
         form = QtWidgets.QFormLayout()
+        form.addRow("显示模式", self.mode)
         form.addRow("Time/div", self.time_div)
         form.addRow("Volt/div", self.volt_div)
-        form.addRow("Horizontal", self.h_offset)
-        form.addRow("Vertical", self.v_center)
+        form.addRow(t("horizontal"), self.h_offset)
+        form.addRow(t("vertical"), self.v_center)
         form.addRow("", self.auto_range)
         form.addRow("", self.grid)
-        form.addRow("Theme", self.theme)
+        form.addRow(t("theme"), self.theme)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addLayout(form)
@@ -70,6 +79,9 @@ class DisplayPanel(QtWidgets.QWidget):
         self.h_offset.setValue(config.horizontal_offset_s)
         self.v_center.setValue(config.vertical_center_mv)
         self.auto_range.setChecked(config.auto_range)
+        index = self.mode.findData(config.display_mode)
+        if index >= 0:
+            self.mode.setCurrentIndex(index)
 
     def _apply_display(self) -> None:
         self.display_requested.emit(
@@ -79,5 +91,6 @@ class DisplayPanel(QtWidgets.QWidget):
                 horizontal_offset_s=self.h_offset.value(),
                 vertical_center_mv=self.v_center.value(),
                 auto_range=self.auto_range.isChecked(),
+                display_mode=str(self.mode.currentData()),
             )
         )

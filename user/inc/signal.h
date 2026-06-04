@@ -37,6 +37,5 @@ uint16_t signal_get_frequency(void);
 uint16_t signal_get_amplitude(void);
 uint16_t signal_get_offset(void);
 uint16_t signal_get_sample_rate(void);
-uint16_t signal_get_interval_ms(void);
 
 #endif

@@ -22,10 +22,10 @@ from pc_app.scope_app.protocol.binary_protocol import BinaryProtocol
 @dataclass
 class SignalState:
     wave: str = "SINE"
-    freq_hz: int = 5
+    freq_hz: int = 1000
     amp_mv: int = 1200
     offset_mv: int = 1650
-    rate_hz: int = 100
+    rate_hz: int = 10_000
     streaming: bool = True
     sequence: int = 0
     start_time: float = time.monotonic()
@@ -35,8 +35,13 @@ class SignalState:
 class SimulatorHandler(socketserver.StreamRequestHandler):
     state = SignalState()
     lock = threading.Lock()
-    version = "0.7.0"
-    binary_block_points = 16
+    version = "0.9.2"
+    rate_min = 1
+    rate_max = 20_000
+    freq_min = 1
+    freq_max = 5_000
+    baud = 921600
+    binary_block_points = 64
     binary = BinaryProtocol()
 
     def setup(self) -> None:
@@ -45,7 +50,7 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
         self._tx_thread = threading.Thread(target=self._tx_loop, daemon=True)
 
     def handle(self) -> None:
-        self._send(f"BOOT,SimpleOscilloscope,{self.version},SIMULATOR,115200\n")
+        self._send(f"BOOT,SimpleOscilloscope,{self.version},SIMULATOR,{self.baud}\n")
         self._send_status()
         self._tx_thread.start()
         while not self._stop.is_set():
@@ -78,6 +83,12 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
             self._send(f"PONG,SimpleOscilloscope,{self.version}\n")
         elif command == "ID?":
             self._send(f"ID,SimpleOscilloscope,SIMULATOR,{self.version},TCP,BINARY_DATA\n")
+        elif command == "CAP?":
+            self._send(
+                f"CAP,RATE_MIN={self.rate_min},RATE_MAX={self.rate_max},"
+                f"FREQ_MIN={self.freq_min},FREQ_MAX={self.freq_max},"
+                f"BAUD={self.baud},BLOCK={self.binary_block_points}\n"
+            )
         elif command == "STATUS":
             self._send_status()
         elif command == "START":
@@ -104,13 +115,13 @@ class SimulatorHandler(socketserver.StreamRequestHandler):
             if key == "WAVE" and value in {"SINE", "SQUARE", "TRI", "TRIANGLE", "SAW"}:
                 self.state.wave = "TRI" if value == "TRIANGLE" else value
             elif key == "FREQ":
-                self.state.freq_hz = max(1, min(500, int(value)))
+                self.state.freq_hz = max(self.freq_min, min(self.freq_max, int(value)))
             elif key == "AMP":
                 self.state.amp_mv = max(0, min(3300, int(value)))
             elif key == "OFFSET":
                 self.state.offset_mv = max(0, min(3300, int(value)))
             elif key == "RATE":
-                self.state.rate_hz = max(1, min(1000, int(value)))
+                self.state.rate_hz = max(self.rate_min, min(self.rate_max, int(value)))
             elif key == "FORMAT" and value in {"ASCII", "BINARY"}:
                 self.state.output_format = value
             else:
