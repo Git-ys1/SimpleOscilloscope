@@ -113,9 +113,9 @@ simplescope-pc
   ↓ PyInstaller onedir
 dist\SimpleScopePC\SimpleScopePC.exe
   ↓ Compress-Archive
-dist\SimpleScopePC-0.9.4-win64-portable.zip
+dist\SimpleScopePC-0.9.5-win64-portable.zip
   ↓ Inno Setup
-dist\installer\SimpleScopePC-0.9.4-Setup.exe
+dist\installer\SimpleScopePC-0.9.5-Setup.exe
 ```
 
 GitHub Actions 在 `v*` tag 上构建 Windows portable zip 并上传 Release 资产；安装包仍可由本机 Inno Setup 构建。

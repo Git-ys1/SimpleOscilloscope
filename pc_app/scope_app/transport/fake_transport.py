@@ -12,7 +12,7 @@ from ..protocol.binary_protocol import BinaryProtocol
 
 class FakeTransport:
     name = "fake"
-    VERSION = "0.9.4"
+    VERSION = "0.9.5"
     RATE_MIN = 1
     RATE_MAX = 20_000
     FREQ_MIN = 1

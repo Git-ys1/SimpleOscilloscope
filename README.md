@@ -1,95 +1,97 @@
 # SimpleOscilloscope
 
-简易示波器/信号源项目，目标硬件为 `STM32F103C8T6` 最小系统板。v0.9.1 起，上位机进入 Windows 软件化发布线：支持 `simplescope-pc` GUI 命令、PyInstaller 便携版、portable zip、Inno Setup 安装包脚本和 GitHub Actions tag 构建。v0.9.2 起，示波器体验改为触发居中显示、中文页签控制面板、1 kHz 测试信号和最高 20 kSa/s 采样链路。v0.9.3 起，示波器画布锁定为仪表式显示，读数固定悬浮，默认 20 kSa/s，并对正弦显示做平滑重建。v0.9.4 起，触发算法加入迟滞、线性插值触发时刻和轻量帧保持，进一步减少 1 kHz 波形的左右漂移。
+SimpleOscilloscope 是一个基于 `STM32F103C8T6` 的简易数字示波器项目，包含下位机固件、Windows 上位机和本地模拟器。项目面向课程设计和低速信号观察场景：STM32 负责 ADC 采样、串口传输和 PWM 测试信号输出，上位机负责连接设备、显示波形、测量基础参数并导出数据。
 
-- Keil 固件工程：STM32 通过串口默认输出二进制采样块，并在 `PA8/TIM1_CH1` 输出同一波形的 PWM 占空比版本。
-- Python 上位机：`PySide6 + PyQtGraph + NumPy + pySerial` 模块化桌面应用，通过 CH340 串口、TCP 模拟器或 `fake://` 本地假数据源读取二进制/ASCII 采样帧并绘制波形。
-- 下位机模拟器：用同一协议模拟单片机，方便没有板子时调试上位机。
+公开仓库：<https://github.com/Git-ys1/SimpleOscilloscope>
 
-![SimpleScope PC v0.8.0 主界面](docs/images/pc_app_v0_8_main.png)
+## 软件运行截图
 
-## 下载安装版
+![SimpleScope PC v0.9.5 运行截图](docs/images/pc_app_v0_9_5_main.png)
 
-普通用户推荐从 GitHub Releases 下载：
+## 项目组成
 
-- `SimpleScopePC-x.y.z-win64-portable.zip`：便携版，解压后双击 `SimpleScopePC.exe`。
-- `SimpleScopePC-x.y.z-Setup.exe`：安装版，安装后从开始菜单启动。
+- `user/inc`、`user/src`：STM32F103C8T6 Keil 固件源码。
+- `pc_app/scope_app`：PySide6 上位机源码，支持 CH340 串口、TCP 模拟器和 `fake://` 本地演示源。
+- `simulator/mcu_simulator.py`：下位机协议模拟器，无硬件时可用于调试上位机。
+- `docs`：用户指南、串口协议和上位机架构说明。
+- `tools`：Keil 构建、烧录、Windows 打包和运行脚本。
 
-便携版和安装版都不要求用户预先安装 Python。
+## 主要功能
 
-## 快速开始
+- 单通道 CH1 采样显示，默认 `20 kSa/s`，串口默认 `921600 baud`。
+- 支持二进制采样块协议，兼容 ASCII 状态、能力和控制命令。
+- 支持 Auto/Normal/Single 触发，波形居中稳定显示。
+- 上位机显示 Vpp、最大值、最小值、平均值、RMS、频率、占空比和点数。
+- 支持 `fake://sine` 演示源、TCP 模拟器和真实 CH340 串口。
+- 支持 PyInstaller 便携版、portable zip 和 Inno Setup 安装包发布。
 
-开发者源码运行仍然可用。
+## 使用方法
 
-初始化上位机本地 Python 3.11 环境：
+### 普通用户运行上位机
+
+从 Releases 下载最新版本：
+
+- `SimpleScopePC-0.9.5-win64-portable.zip`：解压后运行 `SimpleScopePC.exe`。
+- `SimpleScopePC-0.9.5-Setup.exe`：安装后从开始菜单启动。
+
+无硬件演示：
+
+```bat
+SimpleScopePC.exe --source fake://sine --connect
+```
+
+连接真实硬件：
+
+```bat
+SimpleScopePC.exe --source COM14 --baud 921600 --connect
+```
+
+### 开发者源码运行
+
+初始化 Python 环境：
 
 ```bat
 tools\setup_pc_env.bat
 ```
 
-安装本仓库为可编辑 Python 包，并生成 GUI 命令：
-
-```bat
-.venv\python.exe -m pip install -e .[dev]
-simplescope-pc --source fake://sine --connect
-```
-
-没有硬件也能一键运行 Demo，上位机只推荐使用这一个入口：
+运行上位机演示源：
 
 ```bat
 tools\run_scope.bat --source fake://sine --connect
 ```
 
-其中 `--source` 可以换成真实 CH340 串口，例如：
-
-```bat
-tools\run_scope.bat --source COM14 --baud 921600 --connect
-```
-
-如果需要连接 TCP 下位机模拟器，先另开一个终端启动模拟器，再把上位机 `--source` 改为 `tcp://127.0.0.1:8765`：
+连接 TCP 下位机模拟器：
 
 ```bat
 python simulator\mcu_simulator.py
 tools\run_scope.bat --source tcp://127.0.0.1:8765 --connect
 ```
 
-后续上位机会逐步整理成更像普通软件包的安装和启动方式；当前 README 不再推荐直接运行散落脚本。
+### 编译和烧录固件
 
-编译固件：
+编译 Keil 工程：
 
 ```bat
 tools\build_keil.bat
 ```
 
-生成文件：
+生成固件：
 
 ```text
 Objects\SimpleOscilloscope.hex
 ```
 
-烧录到 ST-Link 连接的板子：
+通过 ST-Link 和 STM32CubeProgrammer 烧录：
 
 ```bat
 tools\flash_stlink.bat
 ```
 
-## 打包发布
-
-构建 Windows 便携版：
+### 打包 Windows 发布物
 
 ```bat
 tools\build_portable.bat
-```
-
-生成 portable zip：
-
-```bat
 tools\package_portable_zip.bat
-```
-
-生成 Inno Setup 安装包：
-
-```bat
 tools\build_installer.bat
 ```
 
@@ -97,57 +99,35 @@ tools\build_installer.bat
 
 ```text
 dist\SimpleScopePC\SimpleScopePC.exe
-dist\SimpleScopePC-0.9.4-win64-portable.zip
-dist\installer\SimpleScopePC-0.9.4-Setup.exe
+dist\SimpleScopePC-0.9.5-win64-portable.zip
+dist\installer\SimpleScopePC-0.9.5-Setup.exe
 ```
 
-`tools\build_installer.bat` 需要本机已安装 Inno Setup 6，并能找到 `ISCC.exe`。
+## 测试结果
 
-## 固件结构
+V0.9.5 发布前完成以下验证：
 
-- `user/inc`：项目头文件。
-- `user/src`：主程序、串口协议、波形发生器、板级初始化。
-- `RTE/Device/STM32F103C8`：Keil/CMSIS 启动文件和系统时钟文件。
-- `docs/protocol.md`：串口协议说明。
+| 项目 | 结果 |
+| --- | --- |
+| GitHub 仓库公开性 | Public |
+| Python 单元测试 | `35 passed` |
+| Keil 固件构建 | `0 Error(s), 0 Warning(s)` |
+| Windows 便携版启动 | 通过 |
+| Portable zip 启动 | 通过 |
+| Inno Setup 安装包静默安装与启动 | 通过 |
+| ST-Link 烧录 | 通过 |
+| CH340/COM14 设备握手 | 识别 `SimpleOscilloscope 0.9.5`，采样率 `20000 Hz`，运行状态 `RUN` |
 
-## 上位机结构
+## 硬件说明
 
-- `pc_app/scope_app/core`：采样模型、连接配置、NumPy 环形缓冲、单位格式化。
-- `pc_app/scope_app/transport`：串口、TCP、`fake://` 本地数据源。
-- `pc_app/scope_app/protocol`：ASCII 命令/状态解析、混合流解码，以及二进制采样块协议。
-- `pc_app/scope_app/acquisition`：采集控制器、后台读取线程、接收统计。
-- `pc_app/scope_app/processing`：测量、min-max 显示降采样、触发、处理链。
-- `pc_app/scope_app/ui`：PySide6 主窗口 shell、PyQtGraph 波形屏幕、Dock 面板、测量栏、状态栏、安全提示。
-- `packaging`：应用图标、Inno Setup 安装脚本。
-- `.github/workflows/release-windows.yml`：tag 触发的 Windows portable zip 构建和 Release 资产上传。
+- MCU：`STM32F103C8T6`。
+- ADC 输入：默认 `PA0 / ADC1_IN0`。
+- PWM 测试输出：默认 `PA8 / TIM1_CH1`。
+- 串口：默认 `USART1 PA9/PA10 @ 921600`。
+- 烧录：ST-Link + STM32CubeProgrammer CLI。
 
-数据流保持为：
+## 安全限制
 
-```text
-Transport -> Protocol Decoder -> Acquisition -> WaveformRingBuffer -> Processing -> UI
-```
+当前项目没有模拟前端保护和量程切换，ADC 输入仅允许 `0V ~ 3.3V`。禁止直接测量市电、高压、负压或未偏置的交流信号；超过范围的信号必须先经过分压、偏置、限流和钳位保护。
 
-UI 不直接读串口、不直接解包二进制协议、不直接承担长计算。详见 `docs/pc_app_architecture.md`。
-
-上位机当前支持时基、垂直档位、水平/垂直位置、暂停显示、清空缓冲、自动设置、CSV 导出，以及 `Auto/Normal/Single` 边沿触发。v0.8.0 起，主界面改为示波器式工作台，支持 `fake://sine`、`fake://square`、`fake://triangle`、`fake://noise`、`fake://mixed` 演示源，测量栏显示 Vpp、Vmax、Vmin、平均值、RMS DC、RMS AC、频率和占空比。v0.9.1 起，普通用户可以下载 zip 或安装包运行，不需要安装 Python。v0.9.3 起，`fake://`、TCP 模拟器和固件能力协商默认支持 1 kHz 信号、20 kSa/s 默认采样率和 64 点二进制块，并锁定画布避免误拖拽。v0.9.4 起，触发位置使用过阈值插值时间，不再简单吸附到下一个采样点。
-
-运行测试：
-
-```bat
-.venv\python.exe -m pytest -q
-```
-
-## 当前硬件假设
-
-- MCU：STM32F103C8T6。
-- ADC 输入：当前默认假设 `PA0 / ADC1_IN0`。
-- 安全输入范围：`0V ~ 3.3V`。严禁直接测市电、高压、负压或超过 3.3V 的输入；超过范围或交流双极性信号必须先经过分压、偏置、限流和钳位保护。
-- 调试/烧录：ST-Link，STM32CubeProgrammer CLI 路径为 `F:\AcademicHub\STMicroelectronics\stm32cubeprogrammer\bin\STM32_Programmer_CLI.exe`。
-- 串口：固件当前使用 `USART1 PA9/PA10 @ 921600`。如果最小系统板上的 CH340 实际接到 `USART2 PA2/PA3`，需要在 `user/src/board.c` 和 `user/src/uart.c` 切换引脚和外设。
-
-## 当前限制
-
-- 当前是单通道 CH1。
-- STM32F103C8T6 当前默认 20 kSa/s，最高 20 kSa/s，适合教学和低速信号观察；观察 1 kHz 信号时默认使用 20 kSa/s。
-- 当前没有模拟前端量程切换，不能直接测高压、负压、市电或未偏置的交流信号。
-- 二进制协议和 Windows 打包已接入；FFT、逻辑分析、协议解码和模拟前端量程切换仍是后续路线。
+本项目当前为单通道、低速教学示波器，适合观察 1 kHz 等低速测试信号，不等同于商用示波器。

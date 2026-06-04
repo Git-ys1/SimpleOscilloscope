@@ -35,7 +35,7 @@ class SignalState:
 class SimulatorHandler(socketserver.StreamRequestHandler):
     state = SignalState()
     lock = threading.Lock()
-    version = "0.9.4"
+    version = "0.9.5"
     rate_min = 1
     rate_max = 20_000
     freq_min = 1
