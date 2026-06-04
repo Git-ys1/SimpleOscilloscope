@@ -53,6 +53,13 @@ UI 是仪表盘，不是数据源：
 - Demo Mode 也走 `FakeTransport -> ProtocolStreamDecoder -> AcquisitionController`。
 - MainWindow 只负责菜单、工具栏、中央屏幕、Dock、状态栏和信号连接。
 
+## v0.9.4 触发稳定性修正
+
+- `processing.trigger` 返回带插值时间的 `TriggerPoint`，触发参考不再被量化到下一个采样点。
+- 触发命中加入默认 15 mV 迟滞，减少电平附近的小幅毛刺造成的重复触发。
+- `processing.pipeline` 使用插值后的 `trigger_time_ms` 作为记录视图 reference，触发标记仍保持在屏幕中心。
+- `ScopeWorkspace` 增加轻量帧保持和 holdoff，短时间内的重复触发不会立刻替换当前显示帧。
+
 ## v0.9.3 示波器屏幕修正
 
 - `WaveformView` 禁止鼠标拖拽和滚轮缩放，避免交付演示时误把波形屏幕拉偏。
@@ -106,9 +113,9 @@ simplescope-pc
   ↓ PyInstaller onedir
 dist\SimpleScopePC\SimpleScopePC.exe
   ↓ Compress-Archive
-dist\SimpleScopePC-0.9.3-win64-portable.zip
+dist\SimpleScopePC-0.9.4-win64-portable.zip
   ↓ Inno Setup
-dist\installer\SimpleScopePC-0.9.3-Setup.exe
+dist\installer\SimpleScopePC-0.9.4-Setup.exe
 ```
 
 GitHub Actions 在 `v*` tag 上构建 Windows portable zip 并上传 Release 资产；安装包仍可由本机 Inno Setup 构建。

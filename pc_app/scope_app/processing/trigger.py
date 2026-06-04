@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from ..core.models import DisplayConfig, TriggerConfig
@@ -16,8 +18,15 @@ class TriggerEdge:
     FALLING = "Falling"
 
 
+@dataclass(frozen=True)
+class TriggerPoint:
+    sample_index: int
+    time_ms: float
+
+
 def locate_trigger(time_ms: np.ndarray, value_mv: np.ndarray, config: TriggerConfig) -> int | None:
-    hits = _trigger_hits(value_mv, config)
+    _ = time_ms
+    hits = _trigger_hits_hysteresis(value_mv, config)
     if hits.size == 0:
         return None
     return int(hits[-1] + 1)
@@ -29,14 +38,25 @@ def locate_display_trigger(
     display: DisplayConfig,
     config: TriggerConfig,
 ) -> int | None:
+    point = locate_display_trigger_point(time_ms, value_mv, display, config)
+    if point is None:
+        return None
+    return point.sample_index
+
+
+def locate_display_trigger_point(
+    time_ms: np.ndarray,
+    value_mv: np.ndarray,
+    display: DisplayConfig,
+    config: TriggerConfig,
+) -> TriggerPoint | None:
     if time_ms.size < 2 or value_mv.size < 2:
         return None
 
-    hits = _trigger_hits(value_mv, config)
+    hits = _trigger_hits_hysteresis(value_mv, config)
     if hits.size == 0:
         return None
 
-    indices = hits + 1
     span_ms = max(display.time_per_div_s * 10.0 * 1000.0, 0.001)
     pre = min(max(config.pretrigger_ratio, 0.0), 0.95)
     left_ms = -pre * span_ms + display.horizontal_offset_s * 1000.0
@@ -44,23 +64,69 @@ def locate_display_trigger(
     first_time = float(time_ms[0])
     last_time = float(time_ms[-1])
 
-    full_window = []
-    for index in indices.tolist():
-        trigger_time = float(time_ms[index])
+    full_window: list[TriggerPoint] = []
+    for hit in hits.tolist():
+        trigger_time = _cross_time_ms(time_ms, value_mv, int(hit), config.level_mv)
         if trigger_time + left_ms >= first_time and trigger_time + right_ms <= last_time:
-            full_window.append(index)
+            full_window.append(TriggerPoint(sample_index=int(hit) + 1, time_ms=trigger_time))
     if full_window:
-        return int(full_window[-1])
-    return int(indices[-1])
+        return full_window[-1]
+
+    hit = int(hits[-1])
+    return TriggerPoint(sample_index=hit + 1, time_ms=_cross_time_ms(time_ms, value_mv, hit, config.level_mv))
 
 
-def _trigger_hits(value_mv: np.ndarray, config: TriggerConfig) -> np.ndarray:
+def _cross_time_ms(time_ms: np.ndarray, value_mv: np.ndarray, index: int, level_mv: float) -> float:
+    y0 = float(value_mv[index])
+    y1 = float(value_mv[index + 1])
+    x0 = float(time_ms[index])
+    x1 = float(time_ms[index + 1])
+
+    denom = y1 - y0
+    if abs(denom) < 1e-12:
+        return x1
+
+    ratio = (level_mv - y0) / denom
+    ratio = max(0.0, min(1.0, ratio))
+    return x0 + ratio * (x1 - x0)
+
+
+def _trigger_hits_hysteresis(value_mv: np.ndarray, config: TriggerConfig) -> np.ndarray:
+    if value_mv.size < 2:
+        return np.array([], dtype=np.int64)
+
     level = config.level_mv
-    previous = value_mv[:-1]
-    current = value_mv[1:]
+    hysteresis = _effective_hysteresis_mv(value_mv, config)
+    hits: list[int] = []
+
     if config.edge == TriggerEdge.FALLING:
-        return np.where((previous > level) & (current <= level))[0]
-    return np.where((previous < level) & (current >= level))[0]
+        armed = bool(value_mv[0] >= level + hysteresis)
+        for index in range(1, value_mv.size):
+            previous = float(value_mv[index - 1])
+            current = float(value_mv[index])
+            if previous >= level + hysteresis:
+                armed = True
+            if armed and previous > level >= current:
+                hits.append(index - 1)
+                armed = False
+    else:
+        armed = bool(value_mv[0] <= level - hysteresis)
+        for index in range(1, value_mv.size):
+            previous = float(value_mv[index - 1])
+            current = float(value_mv[index])
+            if previous <= level - hysteresis:
+                armed = True
+            if armed and previous < level <= current:
+                hits.append(index - 1)
+                armed = False
+
+    return np.asarray(hits, dtype=np.int64)
+
+
+def _effective_hysteresis_mv(value_mv: np.ndarray, config: TriggerConfig) -> float:
+    _ = value_mv
+    requested = max(float(getattr(config, "hysteresis_mv", 15.0)), 0.0)
+    return requested
 
 
 def triggered_reference_time_ms(

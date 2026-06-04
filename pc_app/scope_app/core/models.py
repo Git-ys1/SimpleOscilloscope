@@ -51,6 +51,8 @@ class TriggerConfig:
     edge: str = "Rising"
     level_mv: float = 1650.0
     pretrigger_ratio: float = 0.5
+    hysteresis_mv: float = 15.0
+    holdoff_ms: float = 0.5
 
 
 @dataclass(frozen=True)

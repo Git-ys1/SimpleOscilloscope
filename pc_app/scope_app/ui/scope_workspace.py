@@ -22,7 +22,7 @@ from ..core.models import (
 from ..core.ring_buffer import WaveformRingBuffer
 from ..processing.autoset import autoset_from_waveform
 from ..processing.pipeline import process_scope_frame
-from ..processing.record_view import build_record_view
+from ..processing.record_view import RecordView, build_record_view
 from ..storage.export_csv import export_csv
 from .measurement_panel import MeasurementPanel
 from .waveform_view import WaveformView
@@ -64,6 +64,8 @@ class ScopeWorkspace(QtCore.QObject):
         )
         self.trigger_config = TriggerConfig(mode=settings.trigger_mode, level_mv=settings.trigger_level_mv)
         self.single_hold: tuple[float, float] | None = None
+        self.display_hold_record: RecordView | None = None
+        self.display_hold_trigger_time_ms: float | None = None
         self.paused = False
         self.current_source = settings.source
         self.current_protocol = "BINARY"
@@ -88,6 +90,7 @@ class ScopeWorkspace(QtCore.QObject):
         try:
             self.buffer.clear()
             self.single_hold = None
+            self._clear_display_hold()
             self.current_source = config.source
             self.source_changed.emit(config.source)
             self.controller.connect(config)
@@ -124,6 +127,7 @@ class ScopeWorkspace(QtCore.QObject):
     def set_protocol_format(self, output_format: str) -> None:
         self.buffer.clear()
         self.single_hold = None
+        self._clear_display_hold()
         self.waveform.update_waveform(*self.buffer.arrays()[:2])
         self.controller.send(f"SET FORMAT {output_format}")
         self.current_protocol = output_format
@@ -134,6 +138,7 @@ class ScopeWorkspace(QtCore.QObject):
         self.current_wave = wave.upper()
         self.waveform.set_trace_wave(self.current_wave)
         self.current_signal_frequency_hz = frequency_hz
+        self._clear_display_hold()
         self.controller.apply_signal(
             SignalConfig(
                 wave=wave,
@@ -148,6 +153,7 @@ class ScopeWorkspace(QtCore.QObject):
 
     def set_sample_rate(self, sample_rate_hz: int) -> None:
         self.sample_rate_hz = sample_rate_hz
+        self._clear_display_hold()
         self.sample_rate_changed.emit(sample_rate_hz)
         self.controller.send(f"SET RATE {sample_rate_hz}")
         self._update_quality_hint()
@@ -155,6 +161,7 @@ class ScopeWorkspace(QtCore.QObject):
 
     def set_display_config(self, config: DisplayConfig) -> None:
         self.display_config = config
+        self._clear_display_hold()
         self.waveform.set_display_config(config)
         self.display_changed.emit(config)
         self.settings = replace(
@@ -168,6 +175,7 @@ class ScopeWorkspace(QtCore.QObject):
     def set_trigger_config(self, config: TriggerConfig) -> None:
         self.trigger_config = config
         self.single_hold = None
+        self._clear_display_hold()
         self.waveform.set_trigger_config(config)
         self.trigger_changed.emit(config)
         self.settings = replace(self.settings, trigger_mode=config.mode, trigger_level_mv=config.level_mv)
@@ -194,6 +202,7 @@ class ScopeWorkspace(QtCore.QObject):
     def clear_buffer(self) -> None:
         self.buffer.clear()
         self.single_hold = None
+        self._clear_display_hold()
         self.waveform.update_waveform(*self.buffer.arrays()[:2])
         frame = process_scope_frame(*self.buffer.arrays()[:2], self.display_config, self.trigger_config)
         self.measurements.update_measurements(frame.measurements)
@@ -208,6 +217,7 @@ class ScopeWorkspace(QtCore.QObject):
 
     def rearm_single(self) -> None:
         self.single_hold = None
+        self._clear_display_hold()
         self.message_changed.emit("单次触发已重装")
 
     def run_demo(self, source: str = "fake://sine") -> None:
@@ -274,9 +284,45 @@ class ScopeWorkspace(QtCore.QObject):
         self.trigger_state_changed.emit(frame.trigger_state)
         self.waveform.set_status(self.current_run_state, frame.trigger_state)
         record = build_record_view(time_ms, value_mv, self.display_config, self.trigger_config, frame.reference_time_ms, frame.trigger_x_s)
+        if frame.trigger_state == "TRIG":
+            record = self._held_or_new_record(record, frame.trigger_time_ms, force)
+        else:
+            self._clear_display_hold()
         self.waveform.update_record(record)
         self.measurements.update_measurements(frame.measurements)
         self.measurements_changed.emit(frame.measurements)
+
+    def _held_or_new_record(
+        self,
+        record: RecordView,
+        trigger_time_ms: float | None,
+        force: bool,
+    ) -> RecordView:
+        if trigger_time_ms is None:
+            self.display_hold_record = record
+            self.display_hold_trigger_time_ms = None
+            return record
+
+        previous = self.display_hold_trigger_time_ms
+        elapsed = trigger_time_ms - previous if previous is not None else None
+        holdoff_ms = max(float(getattr(self.trigger_config, "holdoff_ms", 0.5)), 0.0)
+        should_update = (
+            force
+            or self.display_hold_record is None
+            or previous is None
+            or elapsed is None
+            or elapsed < 0.0
+            or elapsed >= holdoff_ms
+        )
+        if should_update:
+            self.display_hold_record = record
+            self.display_hold_trigger_time_ms = trigger_time_ms
+            return record
+        return self.display_hold_record
+
+    def _clear_display_hold(self) -> None:
+        self.display_hold_record = None
+        self.display_hold_trigger_time_ms = None
 
     def _handle_frame(self, frame: object) -> None:
         if isinstance(frame, DeviceStatus):

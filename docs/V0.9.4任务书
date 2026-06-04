@@ -1,0 +1,184 @@
+我看了你的仓库，这个“左右来回飘”的核心优化点不在 PyQtGraph 画图，而在触发算法。现在项目 README 里已经写了 v0.9.3 做了“触发居中显示、20 kSa/s 默认采样、正弦平滑重建”，但从代码看，触发定位仍然比较“演示级”：只找相邻两个采样点是否跨过触发电平，然后直接用后一个采样点的时间作为触发时刻。20 kSa/s 时每点间隔 50 μs，你现在 500 μs/div，也就是一个点就能造成约 0.1 格的横向抖动；再加上没有迟滞、没有触发保持，很容易看起来像成熟示波器不该有的“漂”。
+
+最优先改：pc_app/scope_app/processing/trigger.py
+
+现在 _trigger_hits() 只是这样判断：
+
+(previous < level) & (current >= level)
+
+也就是没有迟滞、没有抗噪、没有插值。locate_display_trigger() 又会从所有命中点里选最后一个可显示窗口内的触发点。这个逻辑能“触发”，但不够“锁相”。
+
+建议你把触发点从“采样点索引”升级成“插值后的精确触发时间”。思路如下：
+
+# pc_app/scope_app/processing/trigger.py
+from dataclasses import dataclass
+import numpy as np
+
+@dataclass(frozen=True)
+class TriggerPoint:
+    sample_index: int
+    time_ms: float
+
+def _cross_time_ms(time_ms: np.ndarray, value_mv: np.ndarray, index: int, level: float) -> float:
+    y0 = float(value_mv[index])
+    y1 = float(value_mv[index + 1])
+    x0 = float(time_ms[index])
+    x1 = float(time_ms[index + 1])
+
+    denom = y1 - y0
+    if abs(denom) < 1e-12:
+        return x1
+
+    ratio = (level - y0) / denom
+    ratio = max(0.0, min(1.0, ratio))
+    return x0 + ratio * (x1 - x0)
+
+
+def _trigger_hits_hysteresis(
+    value_mv: np.ndarray,
+    level_mv: float,
+    edge: str,
+    hysteresis_mv: float = 15.0,
+) -> np.ndarray:
+    if value_mv.size < 2:
+        return np.array([], dtype=np.int64)
+
+    hits: list[int] = []
+    armed = False
+
+    if edge == "Falling":
+        for i in range(1, value_mv.size):
+            if value_mv[i - 1] >= level_mv + hysteresis_mv:
+                armed = True
+            if armed and value_mv[i - 1] > level_mv >= value_mv[i]:
+                hits.append(i - 1)
+                armed = False
+    else:
+        for i in range(1, value_mv.size):
+            if value_mv[i - 1] <= level_mv - hysteresis_mv:
+                armed = True
+            if armed and value_mv[i - 1] < level_mv <= value_mv[i]:
+                hits.append(i - 1)
+                armed = False
+
+    return np.asarray(hits, dtype=np.int64)
+
+然后新增一个返回精确触发点的函数，不要只返回 index：
+
+def locate_display_trigger_point(
+    time_ms: np.ndarray,
+    value_mv: np.ndarray,
+    display,
+    config,
+) -> TriggerPoint | None:
+    if time_ms.size < 2 or value_mv.size < 2:
+        return None
+
+    hits = _trigger_hits_hysteresis(
+        value_mv,
+        config.level_mv,
+        config.edge,
+        hysteresis_mv=getattr(config, "hysteresis_mv", 15.0),
+    )
+    if hits.size == 0:
+        return None
+
+    span_ms = max(display.time_per_div_s * 10.0 * 1000.0, 0.001)
+    pre = min(max(config.pretrigger_ratio, 0.0), 0.95)
+    left_ms = -pre * span_ms + display.horizontal_offset_s * 1000.0
+    right_ms = (1.0 - pre) * span_ms + display.horizontal_offset_s * 1000.0
+
+    first_time = float(time_ms[0])
+    last_time = float(time_ms[-1])
+
+    candidates: list[TriggerPoint] = []
+    for hit in hits.tolist():
+        trig_time = _cross_time_ms(time_ms, value_mv, hit, config.level_mv)
+        if trig_time + left_ms >= first_time and trig_time + right_ms <= last_time:
+            candidates.append(TriggerPoint(hit + 1, trig_time))
+
+    if candidates:
+        return candidates[-1]
+
+    hit = int(hits[-1])
+    return TriggerPoint(hit + 1, _cross_time_ms(time_ms, value_mv, hit, config.level_mv))
+第二处改：pc_app/scope_app/processing/pipeline.py
+
+现在 pipeline.py 里是先拿 trigger_index，再用：
+
+trigger_time = float(time_ms[trigger_index])
+
+这一步就是横向抖动的重要来源，因为它把真实过零/过电平时刻量化到了某个采样点上。
+
+改成使用上面插值后的 TriggerPoint.time_ms：
+
+from .trigger import (
+    TriggerMode,
+    locate_display_trigger_point,
+    trigger_marker_x_s,
+)
+
+# 原来:
+# trigger_index = locate_display_trigger(...)
+# if trigger_index is not None:
+#     trigger_time = float(time_ms[trigger_index])
+
+point = locate_display_trigger_point(time_ms, value_mv, display, trigger)
+
+if point is not None:
+    trigger_time = point.time_ms
+    reference = trigger_time
+    marker_x = trigger_marker_x_s(reference, trigger_time)
+    trigger_state = "TRIG"
+
+    if trigger.mode == TriggerMode.SINGLE:
+        next_single_hold = (reference, trigger_time)
+elif trigger.mode == TriggerMode.NORMAL:
+    trigger_state = "WAIT"
+
+这里还有一个细节：trigger_marker_x_s(reference, trigger_time) 在 reference == trigger_time 时永远是 0，这正好对应触发线居中显示；真正要稳的是 reference 的精度。
+
+第三处改：scope_workspace.py 里做“触发保持”
+
+你现在的刷新流程是：后台收到 sample/block，写入环形缓冲，然后 refresh_display() 每次重新从整个 buffer 里找触发点，再 build_record_view()，最后 waveform.update_record() 绘制。
+
+这会让画面每 33 ms 重新“追最新触发”。成熟示波器一般不是这样追着流动缓冲画，而是：
+
+找到触发点；
+固定一段 pre-trigger + post-trigger 记录；
+这一帧显示保持稳定；
+等下一次有效触发再刷新整帧。
+
+也就是说，你可以在 ScopeWorkspace 里加一个 last_trigger_time_ms 或 display_hold_record，只有当新的触发点满足 holdoff 时才更新画面。500 Hz 信号周期约 2 ms，holdoff 可以先设 0.5 ms 到 1 ms；1 kHz 信号可以设 0.25 ms 到 0.5 ms。
+
+第四处：waveform_view.py 不应作为主要修复点
+
+WaveformView.update_record() 基本只是把 RecordView 的 x/y 送进曲线，然后设置 X 范围；它不是漂移的根因。
+
+不过这里有一个显示真实性问题：你现在对正弦波做了 Catmull-Rom 插值，画面会更圆滑，但这只是“视觉重建”，不是示波器真实采样稳定性。真实示波器项目里，建议把这个功能做成“演示模式专用”，真实采样默认用线性连接或原始采样点。
+
+第五处：下位机架构要升级成 ADC + DMA + 触发采集
+
+从当前 main.c 看，定时中断里调用的是 signal_next_sample(board_millis())，也就是生成测试信号样本，同时更新 PA8 PWM，并不是成熟示波器那种 ADC 硬采样链路。
+
+更成熟的下位机架构应该是：
+
+TIM 触发 ADC
+ADC DMA 写入环形缓冲
+固件检测触发点
+冻结一帧：pre-trigger + post-trigger
+通过二进制协议发完整 record
+上位机只负责显示 record
+
+你现在的二进制协议头里有 sequence、sample_rate_hz、channel_count、point_count，PC 端再根据 sequence 和 sample_rate_hz 合成时间轴。这个设计对演示信号够用，但如果要像真正示波器，建议协议里再加 trigger_index、sample_period_ns 或 timestamp_us，让一帧数据天然知道触发点在哪里。
+
+结论
+
+优先级建议：
+
+先改 trigger.py：加触发迟滞 + 触发时间线性插值。
+再改 pipeline.py：不要用 time_ms[trigger_index]，改用插值后的触发时间。
+再在 scope_workspace.py 加触发 holdoff/帧保持。
+最后再升级下位机：TIM + ADC + DMA + 固件触发记录。
+
+只改前两项，画面“左右飘”的观感就会明显改善；要做到真正像成熟示波器，需要第 3 和第 4 项。

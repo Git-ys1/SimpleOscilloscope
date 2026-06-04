@@ -7,7 +7,7 @@
 固件启动：
 
 ```text
-BOOT,SimpleOscilloscope,0.9.3,STM32F103C8T6,921600
+BOOT,SimpleOscilloscope,0.9.4,STM32F103C8T6,921600
 STATUS,SINE,1000,1200,1650,20000,RUN
 FORMAT,BINARY
 CAP,RATE_MIN=1,RATE_MAX=20000,FREQ_MIN=1,FREQ_MAX=5000,BAUD=921600,BLOCK=64
@@ -52,7 +52,7 @@ SET FORMAT ASCII
 
 ## 高速二进制数据帧
 
-v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。v0.9.2 起默认每块 64 点，v0.9.3 起默认采样率为 20 kSa/s。命令、`BOOT`、`STATUS`、`CAP`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
+v0.7.0 起，固件、TCP 模拟器、`fake://` 数据源和上位机默认使用“一帧多点”的二进制 DATA 帧。v0.9.2 起默认每块 64 点，v0.9.3 起默认采样率为 20 kSa/s。v0.9.4 起，上位机显示端使用插值触发时间降低水平抖动。命令、`BOOT`、`STATUS`、`CAP`、`FORMAT`、`OK`、`ERR` 仍走 ASCII 行，方便人工调试。
 
 帧结构，小端序：
 
